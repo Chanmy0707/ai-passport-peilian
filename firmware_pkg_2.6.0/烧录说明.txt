@@ -1,5 +1,8 @@
-folotoy/ai-passport 固件包 v2.6.0（固件工牌 MVP 版）
+folotoy/ai-passport 固件包 v2.6.0（固件工牌 MVP 版·emoji 头像按需下载）
 生成日期：2026-11-22    芯片：ESP32-C3    Flash：8MB
+本版更新：工牌头像改为云端按需下载 64px 动态 emoji（mvp_emoji 分区单槽缓存，
+损坏/换素材自动重下载），缺省/失败回落姓名首字占位；含新分区表（mvp_ring 576KB +
+mvp_emoji 64KB），升级必须整包烧录（含分区表），不能只烧主程序。
 
 一、包内容
   folotoy-ai-passport-2.6.0-merged.bin  合并镜像（推荐，单文件烧录）
