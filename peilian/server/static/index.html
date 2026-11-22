@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Passport 管理端</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --side: #1e2a3a;
+    --side-active: #2f80ed;
+    --text: #24292f;
+    --muted: #6b7280;
+    --border: #e2e6ea;
+    --card: #ffffff;
+    --green: #16a34a;
+    --red: #dc2626;
+    --amber: #d97706;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* 左导航 */
+  .sidebar {
+    width: 216px; background: var(--side); color: #c9d3de;
+    padding: 16px 0; flex-shrink: 0;
+  }
+  .sidebar .brand {
+    color: #fff; font-size: 17px; font-weight: 600;
+    padding: 4px 20px 18px; letter-spacing: .5px;
+  }
+  .sidebar .brand small { display: block; font-size: 11px; color: #7d8ea1; font-weight: 400; }
+  .nav-group { padding: 10px 20px 4px; font-size: 11px; color: #64748b; letter-spacing: 1px; }
+  .nav-item {
+    display: block; width: 100%; text-align: left;
+    padding: 9px 20px; background: none; border: 0; color: inherit;
+    font-size: 14px; cursor: pointer;
+  }
+  .nav-item:hover { background: rgba(255,255,255,.06); color: #fff; }
+  .nav-item.active { background: var(--side-active); color: #fff; }
+
+  /* 主区 */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar {
+    background: var(--card); border-bottom: 1px solid var(--border);
+    padding: 10px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  .topbar .title { font-size: 16px; font-weight: 600; margin-right: auto; }
+  .topbar label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .topbar input {
+    width: 150px; padding: 5px 8px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .content { padding: 24px; }
+
+  /* 通用组件 */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  input[type=text], input[type=date], input[type=number], select, textarea {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; font-family: inherit; background: #fff;
+  }
+  textarea { width: 100%; resize: vertical; }
+  .btn {
+    padding: 7px 14px; border: 1px solid var(--border); border-radius: 6px;
+    background: #fff; cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  .btn:hover { border-color: var(--side-active); color: var(--side-active); }
+  .btn.primary { background: var(--side-active); border-color: var(--side-active); color: #fff; }
+  .btn.primary:hover { opacity: .9; color: #fff; }
+  .btn.danger { color: var(--red); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; background: #fafbfc; white-space: nowrap; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: #f0f6ff; }
+
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; }
+  .tag.done { background: #e7f6ec; color: var(--green); }
+  .tag.processing { background: #fdf1e0; color: var(--amber); }
+  .tag.pending { background: #eef1f4; color: var(--muted); }
+  .tag.failed { background: #fdecec; color: var(--red); }
+
+  .empty { text-align: center; color: var(--muted); padding: 48px 0; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 14px; }
+
+  /* 弹窗 */
+  .modal-mask {
+    display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45);
+    z-index: 50; align-items: center; justify-content: center;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 24px;
+    width: 460px; max-width: 92vw; max-height: 88vh; overflow: auto;
+    box-shadow: 0 20px 50px rgba(0,0,0,.2);
+  }
+  .modal h3 { margin: 0 0 18px; font-size: 16px; }
+  .form-row { margin-bottom: 14px; }
+  .form-row label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .form-row input, .form-row select { width: 100%; }
+  .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+  /* 详情页 */
+  .detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab {
+    padding: 9px 18px; cursor: pointer; border: 0; background: none;
+    font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent;
+  }
+  .tab.active { color: var(--side-active); border-bottom-color: var(--side-active); font-weight: 600; }
+  .tab.disabled { opacity: .45; cursor: not-allowed; }
+  .audio-wrap { background: #fafbfc; border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+  .audio-wrap audio { width: 100%; }
+
+  /* 提示条 */
+  .toast {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    background: #24292f; color: #fff; padding: 9px 18px; border-radius: 8px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 99;
+  }
+  .toast.show { opacity: 1; }
+
+  .placeholder { max-width: 560px; }
+  .placeholder h2 { margin-top: 0; }
+
+  /* 登录 */
+  .login-mask {
+    display: none; position: fixed; inset: 0; background: var(--bg);
+    z-index: 100; align-items: center; justify-content: center;
+  }
+  .login-mask.show { display: flex; }
+  .login-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; width: 360px; max-width: 92vw;
+    box-shadow: 0 20px 50px rgba(0,0,0,.08);
+  }
+  .login-card h2 { margin: 0 0 4px; }
+  .login-card > .muted { margin: 0 0 20px; }
+  .login-card input { width: 100%; }
+  .login-err { color: var(--red); font-size: 12px; margin-top: 10px; display: none; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">AI Passport<small>双模式语音设备 · 管理端</small></div>
+
+    <div class="nav-group">语音质检</div>
+    <button class="nav-item active" data-page="recordings">录音记录</button>
+    <button class="nav-item" id="navBadge">工牌配置</button>
+
+    <div class="nav-group">智能陪练</div>
+    <button class="nav-item" data-page="roles">角色配置</button>
+    <button class="nav-item" data-page="scenarios">场景设置</button>
+
+    <div class="nav-group">日常对话</div>
+    <button class="nav-item" data-page="daily">对话管理</button>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="title" id="pageTitle">录音记录</div>
+      <label>管理员令牌 <input type="text" id="adminToken" placeholder="X-Admin-Token"></label>
+      <label>设备令牌 <input type="text" id="deviceToken" placeholder="X-Device-Token"></label>
+      <button class="btn" id="btnLogout">退出登录</button>
+    </div>
+
+    <div class="content">
+      <!-- 录音列表 -->
+      <section id="page-recordings">
+        <div class="toolbar">
+          <input type="text" id="fDevice" placeholder="设备 ID" style="width:180px">
+          <input type="date" id="fDate">
+          <input type="text" id="fKeyword" placeholder="转写关键词" style="width:180px">
+          <button class="btn primary" id="btnQuery">查询</button>
+          <button class="btn" id="btnBadge">工牌配置</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>开始时间</th><th>设备</th><th>时长</th><th>转写状态</th><th>操作</th></tr></thead>
+            <tbody id="recList"></tbody>
+          </table>
+          <div class="empty" id="recEmpty" style="display:none">暂无录音数据</div>
+          <div class="pager">
+            <span class="muted" id="recTotal"></span>
+            <button class="btn" id="recPrev">上一页</button>
+            <span class="muted" id="recPage"></span>
+            <button class="btn" id="recNext">下一页</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 录音详情 -->
+      <section id="page-detail" style="display:none">
+        <div class="detail-head">
+          <button class="btn" id="btnBack">← 返回列表</button>
+          <div>
+            <div style="font-weight:600" id="dtTitle"></div>
+            <div class="muted" id="dtSub"></div>
+          </div>
+        </div>
+        <div class="tabs">
+          <button class="tab active">转写内容</button>
+          <button class="tab disabled" title="质检 skill 后续接入">质检报告（待接入）</button>
+        </div>
+        <div class="audio-wrap">
+          <div class="muted" style="margin-bottom:6px">音频播放器（点击下方时间轴行跳转对应分段）</div>
+          <audio id="player" controls></audio>
+          <div class="muted" style="margin-top:6px">注：分段当前为裸 Opus 载荷，浏览器直接播放可能受限（Ogg 封装在 P2 合入）。</div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>#</th><th>时间段</th><th>时长</th><th>转写内容</th><th>状态</th></tr></thead>
+            <tbody id="segList"></tbody>
+          </table>
+          <div class="empty" id="segEmpty" style="display:none"></div>
+        </div>
+      </section>
+
+      <!-- 角色配置 -->
+      <section id="page-roles" style="display:none">
+        <div class="toolbar">
+          <button class="btn primary" id="btnNewRole">新建角色</button>
+          <span class="muted">名称 / 性格描述 / 人设 prompt / TTS 音色</span>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>ID</th><th>名称</th><th>性格描述</th><th>TTS 音色</th><th>操作</th></tr></thead>
+            <tbody id="roleList"></tbody>
+          </table>
+          <div class="empty" id="roleEmpty" style="display:none">暂无角色，点击“新建角色”创建</div>
+        </div>
+      </section>
+
+      <!-- 场景设置 -->
+      <section id="page-scenarios" style="display:none">
+        <div class="toolbar">
+          <button class="btn primary" id="btnNewScenario">新建场景</button>
+          <span class="muted">场景名称 / 场景说明 / 绑定角色 / 对话时长 / 难度</span>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>场景名称</th><th>场景说明</th><th>绑定角色</th><th>对话时长</th><th>难度</th><th>操作</th></tr></thead>
+            <tbody id="scList"></tbody>
+          </table>
+          <div class="empty" id="scEmpty" style="display:none">暂无场景，点击“新建场景”创建</div>
+        </div>
+      </section>
+
+      <!-- 日常对话 -->
+      <section id="page-daily" style="display:none">
+        <div class="card placeholder">
+          <h2>日常对话</h2>
+          <p>本期不建管理页面。日常对话直接复用小智官方云端智能体及其模型，请在小智官方后台配置角色与模型。</p>
+          <p class="muted">后续自研日常对话方案时，再纳入本后台管理。</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- 工牌配置弹窗 -->
+<div class="modal-mask" id="badgeModal">
+  <div class="modal">
+    <h3>工牌配置</h3>
+    <div class="form-row"><label>绑定设备 device_id *</label><input type="text" id="bgDevice"></div>
+    <div class="form-row"><label>姓名 *</label><input type="text" id="bgName"></div>
+    <div class="form-row"><label>职位</label><input type="text" id="bgTitle"></div>
+    <div class="form-row"><label>工号</label><input type="text" id="bgNo"></div>
+    <div class="form-row"><label>二维码文本</label><input type="text" id="bgQr"></div>
+    <div class="form-row">
+      <label>头像素材 avatar_id（云端动态 emoji 素材，笑脸和情感）</label>
+      <div style="display:flex; gap:8px; align-items:center">
+        <input type="text" id="bgAvatar" list="avatarPresets" placeholder="留空则回落姓名首字占位" style="flex:1">
+        <img id="bgAvatarPreview" alt="" width="40" height="40" style="display:none">
+      </div>
+      <datalist id="avatarPresets"></datalist>
+    </div>
+    <div class="form-actions">
+      <button class="btn" id="bgRead">读取现有配置</button>
+      <button class="btn" id="bgCancel">取消</button>
+      <button class="btn primary" id="bgSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 角色弹窗 -->
+<div class="modal-mask" id="roleModal">
+  <div class="modal">
+    <h3 id="roleModalTitle">新建角色</h3>
+    <div class="form-row"><label>名称 *</label><input type="text" id="roName"></div>
+    <div class="form-row"><label>性格描述</label><input type="text" id="roPersonality"></div>
+    <div class="form-row"><label>人设 prompt</label><textarea id="roPrompt" rows="5"></textarea></div>
+    <div class="form-row">
+      <label>输出音色（MiMo TTS）</label>
+      <div style="display:flex; gap:8px">
+        <select id="roVoice" style="flex:1"></select>
+        <button class="btn" id="roPreview" title="试听所选音色">试听</button>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn" id="roCancel">取消</button>
+      <button class="btn primary" id="roSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 场景弹窗 -->
+<div class="modal-mask" id="scModal">
+  <div class="modal">
+    <h3 id="scModalTitle">新建场景</h3>
+    <div class="form-row"><label>场景名称 *</label><input type="text" id="scName"></div>
+    <div class="form-row"><label>场景说明</label><textarea id="scDesc" rows="3"></textarea></div>
+    <div class="form-row"><label>绑定角色</label><select id="scRole"></select></div>
+    <div class="form-row"><label>对话时长（分钟，留空表示不限）</label><input type="number" id="scDuration" min="0"></div>
+    <div class="form-row">
+      <label>难度</label>
+      <select id="scDifficulty">
+        <option value="">（不设置）</option>
+        <option value="简单">简单</option>
+        <option value="中等">中等</option>
+        <option value="困难">困难</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button class="btn" id="scCancel">取消</button>
+      <button class="btn primary" id="scSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 登录 -->
+<div class="login-mask" id="loginMask">
+  <div class="login-card">
+    <h2>AI Passport 管理端</h2>
+    <p class="muted">请登录后继续</p>
+    <div class="form-row"><label>用户名</label><input type="text" id="loginUser" autocomplete="username"></div>
+    <div class="form-row"><label>密码</label><input type="password" id="loginPass" autocomplete="current-password"></div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="btn primary" id="loginBtn" style="width:100%; margin-top:18px">登录</button>
+  </div>
+</div>
+
+<script>
+/* ---------- 基础工具 ---------- */
+const $ = (id) => document.getElementById(id);
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function adminHeaders() {
+  return { 'X-Admin-Token': $('adminToken').value.trim() };
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, options);
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* 非 JSON */ }
+  if (res.status === 401) { toast('登录已失效，请重新登录'); showLogin(); throw new Error('unauthorized'); }
+  if (!res.ok) {
+    const msg = body && body.error ? body.error.message : ('请求失败 ' + res.status);
+    if (res.status !== 409) toast(msg);
+    throw Object.assign(new Error(msg), { status: res.status, body });
+  }
+  // 工牌接口返回裸对象，其余 {data, error}
+  return body && body.data !== undefined && body.data !== null ? body.data : body;
+}
+
+/* ---------- 登录鉴权 ---------- */
+function showLogin() {
+  $('loginMask').classList.add('show');
+  setTimeout(() => $('loginUser').focus(), 0);
+}
+function hideLogin() { $('loginMask').classList.remove('show'); }
+function loginFail(msg) {
+  $('loginErr').textContent = msg;
+  $('loginErr').style.display = '';
+}
+
+async function doLogin() {
+  const username = $('loginUser').value.trim();
+  const password = $('loginPass').value;
+  if (!username || !password) { loginFail('请输入用户名和密码'); return; }
+  try {
+    const res = await fetch('/api/v1/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) { loginFail(body && body.error ? body.error.message : '登录失败，请重试'); return; }
+    $('adminToken').value = body.data.token;
+    localStorage.setItem('adminToken', body.data.token);
+    $('loginPass').value = '';
+    $('loginErr').style.display = 'none';
+    hideLogin();
+    toast('登录成功');
+    showPage(currentPage);
+  } catch (e) { loginFail('网络错误，请重试'); }
+}
+
+$('loginBtn').addEventListener('click', doLogin);
+$('loginPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+$('loginUser').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+$('btnLogout').addEventListener('click', () => {
+  localStorage.removeItem('adminToken');
+  $('adminToken').value = '';
+  clearInterval(detailPollTimer);
+  showLogin();
+});
+
+/* ---------- 令牌持久化 ---------- */
+$('adminToken').value = localStorage.getItem('adminToken') || '';
+$('deviceToken').value = localStorage.getItem('deviceToken') || 'device-dev-token';
+$('adminToken').addEventListener('change', () => localStorage.setItem('adminToken', $('adminToken').value.trim()));
+$('deviceToken').addEventListener('change', () => localStorage.setItem('deviceToken', $('deviceToken').value.trim()));
+
+/* ---------- 路由 ---------- */
+const TITLES = {
+  recordings: '录音记录', detail: '对话详情',
+  roles: '角色配置', scenarios: '场景设置', daily: '对话管理',
+};
+let currentPage = 'recordings';
+
+function showPage(page) {
+  currentPage = page;
+  for (const sec of document.querySelectorAll('section')) sec.style.display = 'none';
+  $('page-' + page).style.display = '';
+  $('pageTitle').textContent = TITLES[page] || '';
+  document.querySelectorAll('.nav-item[data-page]').forEach((b) => {
+    const on = b.dataset.page === page || (page === 'detail' && b.dataset.page === 'recordings');
+    b.classList.toggle('active', on);
+  });
+  if (page === 'recordings') loadRecordings();
+  if (page === 'roles') loadRoles();
+  if (page === 'scenarios') loadScenarios();
+}
+
+document.querySelectorAll('.nav-item[data-page]').forEach((b) =>
+  b.addEventListener('click', () => showPage(b.dataset.page))
+);
+
+/* ---------- 工具格式化 ---------- */
+function fmtTime(iso) {
+  if (!iso) return '—';
+  return iso.replace('T', ' ').replace('Z', '');
+}
+function fmtDuration(a, b) {
+  if (!a || !b) return '—';
+  const s = (new Date(b) - new Date(a)) / 1000;
+  if (!isFinite(s) || s < 0) return '—';
+  const m = Math.floor(s / 60), r = Math.round(s % 60);
+  return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+}
+const STATUS_TEXT = { done: '已完成', processing: '转写中', pending: '待转写', failed: '转写失败' };
+function statusTag(s) {
+  return `<span class="tag ${s}">${STATUS_TEXT[s] || s}</span>`;
+}
+
+/* ---------- 录音列表 ---------- */
+let recPage = 1, recSize = 20, recTotal = 0;
+
+async function loadRecordings() {
+  const params = new URLSearchParams({ page: recPage, size: recSize });
+  if ($('fDevice').value.trim()) params.set('device_id', $('fDevice').value.trim());
+  if ($('fDate').value) params.set('date', $('fDate').value);
+  if ($('fKeyword').value.trim()) params.set('keyword', $('fKeyword').value.trim());
+  try {
+    const data = await api('/api/v1/recordings?' + params, { headers: adminHeaders() });
+    recTotal = data.total;
+    $('recList').innerHTML = data.items.map((r) => `
+      <tr class="clickable" data-id="${r.id}">
+        <td>${fmtTime(r.started_at)}</td>
+        <td>${r.device_id}</td>
+        <td>${fmtDuration(r.started_at, r.ended_at)}</td>
+        <td>${statusTag(r.transcript_status)}</td>
+        <td><button class="btn" data-view="${r.id}">查看</button></td>
+      </tr>`).join('');
+    $('recEmpty').style.display = data.items.length ? 'none' : '';
+    $('recTotal').textContent = `共 ${data.total} 条`;
+    $('recPage').textContent = `${data.page} / ${Math.max(1, Math.ceil(data.total / data.size))}`;
+    $('recPrev').disabled = data.page <= 1;
+    $('recNext').disabled = data.page * data.size >= data.total;
+  } catch (e) { /* toast 已提示 */ }
+}
+
+$('btnQuery').addEventListener('click', () => { recPage = 1; loadRecordings(); });
+$('recPrev').addEventListener('click', () => { recPage--; loadRecordings(); });
+$('recNext').addEventListener('click', () => { recPage++; loadRecordings(); });
+$('recList').addEventListener('click', (e) => {
+  const id = e.target.dataset.view || e.target.closest('tr')?.dataset.id;
+  if (id) openDetail(id);
+});
+
+/* ---------- 录音详情（含 409 轮询） ---------- */
+let detailPollTimer = null;
+
+async function openDetail(id) {
+  showPage('detail');
+  $('segList').innerHTML = '';
+  $('segEmpty').style.display = 'none';
+  $('dtTitle').textContent = '加载中…';
+  $('dtSub').textContent = '';
+  clearInterval(detailPollTimer);
+  await loadDetail(id);
+}
+
+async function loadDetail(id) {
+  try {
+    const d = await api('/api/v1/recordings/' + id, { headers: adminHeaders() });
+    clearInterval(detailPollTimer);
+    $('dtTitle').textContent = `设备 ${d.device_id} · ${fmtTime(d.started_at)}`;
+    $('dtSub').textContent = `时长 ${fmtDuration(d.started_at, d.ended_at)} · 会话状态 ${d.status} · ${d.segments.length} 个分段`;
+    $('segList').innerHTML = d.segments.map((s, i) => `
+      <tr class="clickable" data-url="${s.file_url}">
+        <td>${i + 1}</td>
+        <td>#${s.seq_start} – #${s.seq_end}</td>
+        <td>${(s.duration_ms / 1000).toFixed(1)}s</td>
+        <td>${s.text || '<span class="muted">（无转写）</span>'}</td>
+        <td>${statusTag(s.status === 'transcribed' ? 'done' : s.status)}</td>
+      </tr>`).join('');
+    $('segEmpty').style.display = d.segments.length ? 'none' : '';
+    $('segEmpty').textContent = '该会话暂无分段';
+    $('player').removeAttribute('src');
+  } catch (e) {
+    if (e.status === 409) {
+      $('dtTitle').textContent = '转写未完成';
+      $('dtSub').textContent = '转写流水线处理中，每 5 秒自动刷新…';
+      $('segEmpty').style.display = '';
+      $('segEmpty').textContent = '转写进行中，请稍候…';
+      detailPollTimer = setTimeout(() => loadDetail(id), 5000);
+    } else {
+      $('dtTitle').textContent = '加载失败';
+      $('dtSub').textContent = e.message;
+    }
+  }
+}
+
+$('btnBack').addEventListener('click', () => { clearInterval(detailPollTimer); showPage('recordings'); });
+$('segList').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr');
+  if (tr && tr.dataset.url) {
+    $('player').src = tr.dataset.url;
+    $('player').play().catch(() => {});
+  }
+});
+
+/* ---------- 工牌配置弹窗 ---------- */
+function openBadge() { $('badgeModal').classList.add('show'); }
+$('navBadge').addEventListener('click', openBadge);
+$('btnBadge').addEventListener('click', openBadge);
+$('bgCancel').addEventListener('click', () => $('badgeModal').classList.remove('show'));
+
+/* 头像素材：云端 /emojis/manifest.json（笑脸和情感动态 emoji 集） */
+let avatarManifest = null;
+async function loadAvatarPresets() {
+  if (avatarManifest) return avatarManifest;
+  try {
+    const res = await fetch('/emojis/manifest.json');
+    avatarManifest = (await res.json()).items || [];
+    $('avatarPresets').innerHTML = avatarManifest
+      .map((it) => `<option value="${it.id}" label="${it.emoji} ${it.name_zh}">`).join('');
+  } catch (e) { avatarManifest = []; }
+  return avatarManifest;
+}
+function updateAvatarPreview() {
+  const id = $('bgAvatar').value.trim();
+  const img = $('bgAvatarPreview');
+  const hit = (avatarManifest || []).find((it) => it.id === id);
+  if (hit) { img.src = hit.urls['64']; img.title = `${hit.emoji} ${hit.name_zh}`; img.style.display = ''; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; }
+}
+$('bgAvatar').addEventListener('input', updateAvatarPreview);
+loadAvatarPresets().then(updateAvatarPreview);
+
+$('bgRead').addEventListener('click', async () => {
+  const dev = $('bgDevice').value.trim();
+  if (!dev) { toast('请先填写设备 ID'); return; }
+  try {
+    const res = await fetch(`/api/v1/devices/${encodeURIComponent(dev)}/badge`, {
+      headers: { 'X-Device-Token': $('deviceToken').value.trim() },
+    });
+    const body = await res.json();
+    if (!res.ok) { toast(body.error ? body.error.message : '读取失败'); return; }
+    $('bgName').value = body.name || '';
+    $('bgTitle').value = body.title || '';
+    $('bgNo').value = body.employee_no || '';
+    $('bgQr').value = body.qr_text || '';
+    $('bgAvatar').value = body.avatar_id || '';
+    updateAvatarPreview();
+    toast('已读取现有配置');
+  } catch (e) { toast('读取失败'); }
+});
+
+$('bgSave').addEventListener('click', async () => {
+  const dev = $('bgDevice').value.trim();
+  const name = $('bgName').value.trim();
+  if (!dev || !name) { toast('设备 ID 与姓名必填'); return; }
+  try {
+    await api(`/api/v1/devices/${encodeURIComponent(dev)}/badge`, {
+      method: 'PUT',
+      headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        title: $('bgTitle').value.trim() || null,
+        employee_no: $('bgNo').value.trim() || null,
+        qr_text: $('bgQr').value.trim() || null,
+        avatar_id: $('bgAvatar').value.trim() || null,
+      }),
+    });
+    toast('工牌配置已保存，设备开机即生效');
+    $('badgeModal').classList.remove('show');
+  } catch (e) { /* toast 已提示 */ }
+});
+
+/* ---------- 角色配置 ---------- */
+let editingRoleId = null;
+let ttsVoices = [];
+
+async function loadTtsVoices() {
+  try {
+    ttsVoices = await api('/api/v1/tts/voices', { headers: adminHeaders() });
+  } catch (e) { ttsVoices = []; }
+}
+
+function fillVoiceSelect(current) {
+  const opts = ttsVoices.map((v) => {
+    const meta = [v.language, v.gender].filter(Boolean).join(' / ');
+    return `<option value="${v.id}">${meta ? v.name + '（' + meta + '）' : v.name}</option>`;
+  });
+  if (current && !ttsVoices.some((v) => v.id === current)) {
+    opts.unshift(`<option value="${current}">${current}</option>`);
+  }
+  $('roVoice').innerHTML = opts.join('');
+  if (current) $('roVoice').value = current;
+}
+
+async function loadRoles() {
+  try {
+    const items = await api('/api/v1/roles', { headers: adminHeaders() });
+    $('roleList').innerHTML = items.map((r) => `
+      <tr>
+        <td>${r.id}</td>
+        <td>${r.name}</td>
+        <td>${r.personality || '<span class="muted">—</span>'}</td>
+        <td>${(ttsVoices.find((v) => v.id === r.tts_voice) || {}).name || r.tts_voice || '<span class="muted">—</span>'}</td>
+        <td>
+          <button class="btn" data-edit="${r.id}">编辑</button>
+          <button class="btn danger" data-del="${r.id}">删除</button>
+        </td>
+      </tr>`).join('');
+    $('roleEmpty').style.display = items.length ? 'none' : '';
+  } catch (e) { /* toast 已提示 */ }
+}
+
+async function openRoleModal(role) {
+  editingRoleId = role ? role.id : null;
+  $('roleModalTitle').textContent = role ? '编辑角色' : '新建角色';
+  $('roName').value = role ? role.name : '';
+  $('roPersonality').value = role ? (role.personality || '') : '';
+  $('roPrompt').value = role ? (role.system_prompt || '') : '';
+  if (!ttsVoices.length) await loadTtsVoices();
+  fillVoiceSelect(role ? (role.tts_voice || '') : '');
+  $('roleModal').classList.add('show');
+}
+
+$('btnNewRole').addEventListener('click', () => openRoleModal(null));
+$('roPreview').addEventListener('click', async () => {
+  const voice = $('roVoice').value;
+  if (!voice) { toast('请先选择音色'); return; }
+  try {
+    const res = await fetch('/api/v1/tts/preview', {
+      method: 'POST',
+      headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice }),
+    });
+    if (!res.ok) {
+      let body = null;
+      try { body = await res.json(); } catch (e2) { /* 非 JSON */ }
+      toast(body && body.error ? body.error.message : '试听失败 ' + res.status);
+      return;
+    }
+    const blob = await res.blob();
+    new Audio(URL.createObjectURL(blob)).play();
+  } catch (e) { toast('试听失败'); }
+});
+$('roCancel').addEventListener('click', () => $('roleModal').classList.remove('show'));
+$('roSave').addEventListener('click', async () => {
+  const name = $('roName').value.trim();
+  if (!name) { toast('名称必填'); return; }
+  const payload = {
+    name,
+    personality: $('roPersonality').value.trim() || null,
+    system_prompt: $('roPrompt').value.trim() || null,
+    tts_voice: $('roVoice').value.trim() || null,
+  };
+  try {
+    if (editingRoleId != null) {
+      await api('/api/v1/roles/' + editingRoleId, {
+        method: 'PUT',
+        headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await api('/api/v1/roles', {
+        method: 'POST',
+        headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }
+    toast('角色已保存');
+    $('roleModal').classList.remove('show');
+    loadRoles();
+  } catch (e) { /* toast 已提示 */ }
+});
+
+$('roleList').addEventListener('click', async (e) => {
+  const editId = e.target.dataset.edit, delId = e.target.dataset.del;
+  if (editId) {
+    try {
+      const role = await api('/api/v1/roles/' + editId, { headers: adminHeaders() });
+      openRoleModal(role);
+    } catch (e2) { /* toast 已提示 */ }
+  } else if (delId) {
+    if (!confirm('确认删除该角色？绑定该角色的场景将失去绑定。')) return;
+    try {
+      await api('/api/v1/roles/' + delId, { method: 'DELETE', headers: adminHeaders() });
+      toast('角色已删除');
+      loadRoles();
+    } catch (e2) { /* toast 已提示 */ }
+  }
+});
+
+/* ---------- 场景设置 ---------- */
+let editingScId = null;
+
+async function loadScenarios() {
+  try {
+    const items = await api('/api/v1/scenarios', { headers: adminHeaders() });
+    $('scList').innerHTML = items.map((s) => {
+      const id = s.scenario_id ?? s.id;
+      return `
+      <tr>
+        <td>${s.name}</td>
+        <td>${s.description || '<span class="muted">—</span>'}</td>
+        <td>${s.role_name || '<span class="muted">未绑定</span>'}</td>
+        <td>${s.duration_minutes != null ? s.duration_minutes + ' 分钟' : '<span class="muted">不限</span>'}</td>
+        <td>${s.difficulty || '<span class="muted">—</span>'}</td>
+        <td>
+          <button class="btn" data-edit="${id}">编辑</button>
+          <button class="btn danger" data-del="${id}">删除</button>
+        </td>
+      </tr>`;
+    }).join('');
+    $('scEmpty').style.display = items.length ? 'none' : '';
+  } catch (e) { /* toast 已提示 */ }
+}
+
+async function fillRoleSelect(selectedId) {
+  const roles = await api('/api/v1/roles', { headers: adminHeaders() });
+  $('scRole').innerHTML = '<option value="">（不绑定）</option>' +
+    roles.map((r) => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}</option>`).join('');
+}
+
+async function openScModal(sc) {
+  editingScId = sc ? (sc.scenario_id ?? sc.id) : null;
+  $('scModalTitle').textContent = sc ? '编辑场景' : '新建场景';
+  $('scName').value = sc ? sc.name : '';
+  $('scDesc').value = sc ? (sc.description || '') : '';
+  $('scDuration').value = sc && sc.duration_minutes != null ? sc.duration_minutes : '';
+  $('scDifficulty').value = sc ? (sc.difficulty || '') : '';
+  try { await fillRoleSelect(sc ? sc.role_id : null); } catch (e) { /* toast 已提示 */ }
+  $('scModal').classList.add('show');
+}
+
+$('btnNewScenario').addEventListener('click', () => openScModal(null));
+$('scCancel').addEventListener('click', () => $('scModal').classList.remove('show'));
+$('scSave').addEventListener('click', async () => {
+  const name = $('scName').value.trim();
+  if (!name) { toast('场景名称必填'); return; }
+  const dur = $('scDuration').value;
+  const payload = {
+    name,
+    description: $('scDesc').value.trim() || null,
+    role_id: $('scRole').value ? Number($('scRole').value) : null,
+    duration_minutes: dur === '' ? null : Number(dur),
+    difficulty: $('scDifficulty').value || null,
+  };
+  try {
+    if (editingScId != null) {
+      await api('/api/v1/scenarios/' + encodeURIComponent(editingScId), {
+        method: 'PUT',
+        headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await api('/api/v1/scenarios', {
+        method: 'POST',
+        headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }
+    toast('场景已保存，设备端下次拉取即生效');
+    $('scModal').classList.remove('show');
+    loadScenarios();
+  } catch (e) { /* toast 已提示 */ }
+});
+
+$('scList').addEventListener('click', async (e) => {
+  const editId = e.target.dataset.edit, delId = e.target.dataset.del;
+  if (editId) {
+    try {
+      const sc = await api('/api/v1/scenarios/' + encodeURIComponent(editId), { headers: adminHeaders() });
+      openScModal(sc);
+    } catch (e2) { /* toast 已提示 */ }
+  } else if (delId) {
+    if (!confirm('确认删除该场景？')) return;
+    try {
+      await api('/api/v1/scenarios/' + encodeURIComponent(delId), { method: 'DELETE', headers: adminHeaders() });
+      toast('场景已删除');
+      loadScenarios();
+    } catch (e2) { /* toast 已提示 */ }
+  }
+});
+
+/* ---------- 启动 ---------- */
+if (localStorage.getItem('adminToken')) loadRecordings();
+else showLogin();
+</script>
+</body>
+</html>

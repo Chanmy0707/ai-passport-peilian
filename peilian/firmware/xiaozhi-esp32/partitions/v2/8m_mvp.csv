@@ -1,0 +1,12 @@
+# ESP-IDF Partition Table（MVP 工牌模式：assets 缩为 1.375M，腾出 mvp_ring 录音环形缓冲 + mvp_emoji 头像缓存）
+# assets 实测产物约 1.3MB（TTS 字体+表情图），故 assets 保留 0x160000；
+# mvp_ring 576KB 录音环形缓冲，mvp_emoji 64KB 单槽头像 GIF 缓存（云端按需下载，见 emoji_cache.h）
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,    0x4000,
+otadata,  data, ota,     0xd000,    0x2000,
+phy_init, data, phy,     0xf000,    0x1000,
+ota_0,    app,  ota_0,   0x20000,   0x2f0000,
+ota_1,    app,  ota_1,   ,          0x2f0000,
+assets,   data, spiffs,  0x600000,  0x160000,
+mvp_ring, data, 0x40,    0x760000,  0x90000,
+mvp_emoji, data, 0x41,   0x7F0000,  0x10000,

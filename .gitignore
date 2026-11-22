@@ -1,0 +1,16 @@
+# 构建产物（xiaozhi-esp32）
+build/
+managed_components/
+sdkconfig.old
+
+# Python 运行环境与缓存（peilian/server）
+.venv/
+__pycache__/
+*.pyc
+
+# 敏感配置与运行数据（.env 含真实密钥，严禁入库；.env.example 可入库）
+.env
+*.db
+
+# 运行时录音数据
+peilian/server/audio/

@@ -1,0 +1,7 @@
+.env
+.venv/
+audio/
+smoke-audio/
+*.db
+__pycache__/
+*.pyc

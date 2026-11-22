@@ -1,0 +1,824 @@
+{
+  "category": "smileys_emotion",
+  "category_zh": "笑脸和情感",
+  "source": "JoyPixels 动画 emoji（免费 GIF 32/64/128px），来源 https://www.emojiall.com/zh-hans/platform-animation",
+  "count": 68,
+  "items": [
+    {
+      "id": "grinning_face_with_smiling_eyes",
+      "emoji": "😄",
+      "codepoint": "1F604",
+      "name_zh": "大笑",
+      "name_en": "grinning face with smiling eyes",
+      "urls": {
+        "32": "/emojis/32px/grinning_face_with_smiling_eyes.gif",
+        "64": "/emojis/64px/grinning_face_with_smiling_eyes.gif",
+        "128": "/emojis/128px/grinning_face_with_smiling_eyes.gif"
+      }
+    },
+    {
+      "id": "beaming_face_with_smiling_eyes",
+      "emoji": "😁",
+      "codepoint": "1F601",
+      "name_zh": "嘻嘻",
+      "name_en": "beaming face with smiling eyes",
+      "urls": {
+        "32": "/emojis/32px/beaming_face_with_smiling_eyes.gif",
+        "64": "/emojis/64px/beaming_face_with_smiling_eyes.gif",
+        "128": "/emojis/128px/beaming_face_with_smiling_eyes.gif"
+      }
+    },
+    {
+      "id": "grinning_squinting_face",
+      "emoji": "😆",
+      "codepoint": "1F606",
+      "name_zh": "斜眼笑",
+      "name_en": "grinning squinting face",
+      "urls": {
+        "32": "/emojis/32px/grinning_squinting_face.gif",
+        "64": "/emojis/64px/grinning_squinting_face.gif",
+        "128": "/emojis/128px/grinning_squinting_face.gif"
+      }
+    },
+    {
+      "id": "rolling_on_the_floor_laughing",
+      "emoji": "🤣",
+      "codepoint": "1F923",
+      "name_zh": "笑得满地打滚",
+      "name_en": "rolling on the floor laughing",
+      "urls": {
+        "32": "/emojis/32px/rolling_on_the_floor_laughing.gif",
+        "64": "/emojis/64px/rolling_on_the_floor_laughing.gif",
+        "128": "/emojis/128px/rolling_on_the_floor_laughing.gif"
+      }
+    },
+    {
+      "id": "face_with_tears_of_joy",
+      "emoji": "😂",
+      "codepoint": "1F602",
+      "name_zh": "笑哭了",
+      "name_en": "face with tears of joy",
+      "urls": {
+        "32": "/emojis/32px/face_with_tears_of_joy.gif",
+        "64": "/emojis/64px/face_with_tears_of_joy.gif",
+        "128": "/emojis/128px/face_with_tears_of_joy.gif"
+      }
+    },
+    {
+      "id": "upside_down_face",
+      "emoji": "🙃",
+      "codepoint": "1F643",
+      "name_zh": "倒脸",
+      "name_en": "upside-down face",
+      "urls": {
+        "32": "/emojis/32px/upside_down_face.gif",
+        "64": "/emojis/64px/upside_down_face.gif",
+        "128": "/emojis/128px/upside_down_face.gif"
+      }
+    },
+    {
+      "id": "winking_face",
+      "emoji": "😉",
+      "codepoint": "1F609",
+      "name_zh": "眨眼",
+      "name_en": "winking face",
+      "urls": {
+        "32": "/emojis/32px/winking_face.gif",
+        "64": "/emojis/64px/winking_face.gif",
+        "128": "/emojis/128px/winking_face.gif"
+      }
+    },
+    {
+      "id": "smiling_face_with_halo",
+      "emoji": "😇",
+      "codepoint": "1F607",
+      "name_zh": "微笑天使",
+      "name_en": "smiling face with halo",
+      "urls": {
+        "32": "/emojis/32px/smiling_face_with_halo.gif",
+        "64": "/emojis/64px/smiling_face_with_halo.gif",
+        "128": "/emojis/128px/smiling_face_with_halo.gif"
+      }
+    },
+    {
+      "id": "smiling_face_with_hearts",
+      "emoji": "🥰",
+      "codepoint": "1F970",
+      "name_zh": "喜笑颜开",
+      "name_en": "smiling face with hearts",
+      "urls": {
+        "32": "/emojis/32px/smiling_face_with_hearts.gif",
+        "64": "/emojis/64px/smiling_face_with_hearts.gif",
+        "128": "/emojis/128px/smiling_face_with_hearts.gif"
+      }
+    },
+    {
+      "id": "smiling_face_with_heart_eyes",
+      "emoji": "😍",
+      "codepoint": "1F60D",
+      "name_zh": "花痴",
+      "name_en": "smiling face with heart-eyes",
+      "urls": {
+        "32": "/emojis/32px/smiling_face_with_heart_eyes.gif",
+        "64": "/emojis/64px/smiling_face_with_heart_eyes.gif",
+        "128": "/emojis/128px/smiling_face_with_heart_eyes.gif"
+      }
+    },
+    {
+      "id": "star_struck",
+      "emoji": "🤩",
+      "codepoint": "1F929",
+      "name_zh": "好崇拜哦",
+      "name_en": "star-struck",
+      "urls": {
+        "32": "/emojis/32px/star_struck.gif",
+        "64": "/emojis/64px/star_struck.gif",
+        "128": "/emojis/128px/star_struck.gif"
+      }
+    },
+    {
+      "id": "face_blowing_a_kiss",
+      "emoji": "😘",
+      "codepoint": "1F618",
+      "name_zh": "飞吻",
+      "name_en": "face blowing a kiss",
+      "urls": {
+        "32": "/emojis/32px/face_blowing_a_kiss.gif",
+        "64": "/emojis/64px/face_blowing_a_kiss.gif",
+        "128": "/emojis/128px/face_blowing_a_kiss.gif"
+      }
+    },
+    {
+      "id": "smiling_face",
+      "emoji": "☺",
+      "codepoint": "263A",
+      "name_zh": "微笑",
+      "name_en": "smiling face",
+      "urls": {
+        "32": "/emojis/32px/smiling_face.gif",
+        "64": "/emojis/64px/smiling_face.gif",
+        "128": "/emojis/128px/smiling_face.gif"
+      }
+    },
+    {
+      "id": "winking_face_with_tongue",
+      "emoji": "😜",
+      "codepoint": "1F61C",
+      "name_zh": "眨眼吐舌",
+      "name_en": "winking face with tongue",
+      "urls": {
+        "32": "/emojis/32px/winking_face_with_tongue.gif",
+        "64": "/emojis/64px/winking_face_with_tongue.gif",
+        "128": "/emojis/128px/winking_face_with_tongue.gif"
+      }
+    },
+    {
+      "id": "zany_face",
+      "emoji": "🤪",
+      "codepoint": "1F92A",
+      "name_zh": "滑稽",
+      "name_en": "zany face",
+      "urls": {
+        "32": "/emojis/32px/zany_face.gif",
+        "64": "/emojis/64px/zany_face.gif",
+        "128": "/emojis/128px/zany_face.gif"
+      }
+    },
+    {
+      "id": "money_mouth_face",
+      "emoji": "🤑",
+      "codepoint": "1F911",
+      "name_zh": "发财",
+      "name_en": "money-mouth face",
+      "urls": {
+        "32": "/emojis/32px/money_mouth_face.gif",
+        "64": "/emojis/64px/money_mouth_face.gif",
+        "128": "/emojis/128px/money_mouth_face.gif"
+      }
+    },
+    {
+      "id": "shushing_face",
+      "emoji": "🤫",
+      "codepoint": "1F92B",
+      "name_zh": "安静的脸",
+      "name_en": "shushing face",
+      "urls": {
+        "32": "/emojis/32px/shushing_face.gif",
+        "64": "/emojis/64px/shushing_face.gif",
+        "128": "/emojis/128px/shushing_face.gif"
+      }
+    },
+    {
+      "id": "thinking_face",
+      "emoji": "🤔",
+      "codepoint": "1F914",
+      "name_zh": "想一想",
+      "name_en": "thinking face",
+      "urls": {
+        "32": "/emojis/32px/thinking_face.gif",
+        "64": "/emojis/64px/thinking_face.gif",
+        "128": "/emojis/128px/thinking_face.gif"
+      }
+    },
+    {
+      "id": "zipper_mouth_face",
+      "emoji": "🤐",
+      "codepoint": "1F910",
+      "name_zh": "闭嘴",
+      "name_en": "zipper-mouth face",
+      "urls": {
+        "32": "/emojis/32px/zipper_mouth_face.gif",
+        "64": "/emojis/64px/zipper_mouth_face.gif",
+        "128": "/emojis/128px/zipper_mouth_face.gif"
+      }
+    },
+    {
+      "id": "smirking_face",
+      "emoji": "😏",
+      "codepoint": "1F60F",
+      "name_zh": "得意",
+      "name_en": "smirking face",
+      "urls": {
+        "32": "/emojis/32px/smirking_face.gif",
+        "64": "/emojis/64px/smirking_face.gif",
+        "128": "/emojis/128px/smirking_face.gif"
+      }
+    },
+    {
+      "id": "unamused_face",
+      "emoji": "😒",
+      "codepoint": "1F612",
+      "name_zh": "不高兴",
+      "name_en": "unamused face",
+      "urls": {
+        "32": "/emojis/32px/unamused_face.gif",
+        "64": "/emojis/64px/unamused_face.gif",
+        "128": "/emojis/128px/unamused_face.gif"
+      }
+    },
+    {
+      "id": "face_with_rolling_eyes",
+      "emoji": "🙄",
+      "codepoint": "1F644",
+      "name_zh": "翻白眼",
+      "name_en": "face with rolling eyes",
+      "urls": {
+        "32": "/emojis/32px/face_with_rolling_eyes.gif",
+        "64": "/emojis/64px/face_with_rolling_eyes.gif",
+        "128": "/emojis/128px/face_with_rolling_eyes.gif"
+      }
+    },
+    {
+      "id": "lying_face",
+      "emoji": "🤥",
+      "codepoint": "1F925",
+      "name_zh": "说谎",
+      "name_en": "lying face",
+      "urls": {
+        "32": "/emojis/32px/lying_face.gif",
+        "64": "/emojis/64px/lying_face.gif",
+        "128": "/emojis/128px/lying_face.gif"
+      }
+    },
+    {
+      "id": "relieved_face",
+      "emoji": "😌",
+      "codepoint": "1F60C",
+      "name_zh": "松了口气",
+      "name_en": "relieved face",
+      "urls": {
+        "32": "/emojis/32px/relieved_face.gif",
+        "64": "/emojis/64px/relieved_face.gif",
+        "128": "/emojis/128px/relieved_face.gif"
+      }
+    },
+    {
+      "id": "drooling_face",
+      "emoji": "🤤",
+      "codepoint": "1F924",
+      "name_zh": "流口水",
+      "name_en": "drooling face",
+      "urls": {
+        "32": "/emojis/32px/drooling_face.gif",
+        "64": "/emojis/64px/drooling_face.gif",
+        "128": "/emojis/128px/drooling_face.gif"
+      }
+    },
+    {
+      "id": "sleeping_face",
+      "emoji": "😴",
+      "codepoint": "1F634",
+      "name_zh": "睡着了",
+      "name_en": "sleeping face",
+      "urls": {
+        "32": "/emojis/32px/sleeping_face.gif",
+        "64": "/emojis/64px/sleeping_face.gif",
+        "128": "/emojis/128px/sleeping_face.gif"
+      }
+    },
+    {
+      "id": "face_with_thermometer",
+      "emoji": "🤒",
+      "codepoint": "1F912",
+      "name_zh": "发烧",
+      "name_en": "face with thermometer",
+      "urls": {
+        "32": "/emojis/32px/face_with_thermometer.gif",
+        "64": "/emojis/64px/face_with_thermometer.gif",
+        "128": "/emojis/128px/face_with_thermometer.gif"
+      }
+    },
+    {
+      "id": "face_with_head_bandage",
+      "emoji": "🤕",
+      "codepoint": "1F915",
+      "name_zh": "受伤",
+      "name_en": "face with head-bandage",
+      "urls": {
+        "32": "/emojis/32px/face_with_head_bandage.gif",
+        "64": "/emojis/64px/face_with_head_bandage.gif",
+        "128": "/emojis/128px/face_with_head_bandage.gif"
+      }
+    },
+    {
+      "id": "face_vomiting",
+      "emoji": "🤮",
+      "codepoint": "1F92E",
+      "name_zh": "呕吐",
+      "name_en": "face vomiting",
+      "urls": {
+        "32": "/emojis/32px/face_vomiting.gif",
+        "64": "/emojis/64px/face_vomiting.gif",
+        "128": "/emojis/128px/face_vomiting.gif"
+      }
+    },
+    {
+      "id": "sneezing_face",
+      "emoji": "🤧",
+      "codepoint": "1F927",
+      "name_zh": "打喷嚏",
+      "name_en": "sneezing face",
+      "urls": {
+        "32": "/emojis/32px/sneezing_face.gif",
+        "64": "/emojis/64px/sneezing_face.gif",
+        "128": "/emojis/128px/sneezing_face.gif"
+      }
+    },
+    {
+      "id": "hot_face",
+      "emoji": "🥵",
+      "codepoint": "1F975",
+      "name_zh": "脸发烧",
+      "name_en": "hot face",
+      "urls": {
+        "32": "/emojis/32px/hot_face.gif",
+        "64": "/emojis/64px/hot_face.gif",
+        "128": "/emojis/128px/hot_face.gif"
+      }
+    },
+    {
+      "id": "cold_face",
+      "emoji": "🥶",
+      "codepoint": "1F976",
+      "name_zh": "冷脸",
+      "name_en": "cold face",
+      "urls": {
+        "32": "/emojis/32px/cold_face.gif",
+        "64": "/emojis/64px/cold_face.gif",
+        "128": "/emojis/128px/cold_face.gif"
+      }
+    },
+    {
+      "id": "woozy_face",
+      "emoji": "🥴",
+      "codepoint": "1F974",
+      "name_zh": "头昏眼花",
+      "name_en": "woozy face",
+      "urls": {
+        "32": "/emojis/32px/woozy_face.gif",
+        "64": "/emojis/64px/woozy_face.gif",
+        "128": "/emojis/128px/woozy_face.gif"
+      }
+    },
+    {
+      "id": "exploding_head",
+      "emoji": "🤯",
+      "codepoint": "1F92F",
+      "name_zh": "爆炸头",
+      "name_en": "exploding head",
+      "urls": {
+        "32": "/emojis/32px/exploding_head.gif",
+        "64": "/emojis/64px/exploding_head.gif",
+        "128": "/emojis/128px/exploding_head.gif"
+      }
+    },
+    {
+      "id": "cowboy_hat_face",
+      "emoji": "🤠",
+      "codepoint": "1F920",
+      "name_zh": "牛仔帽脸",
+      "name_en": "cowboy hat face",
+      "urls": {
+        "32": "/emojis/32px/cowboy_hat_face.gif",
+        "64": "/emojis/64px/cowboy_hat_face.gif",
+        "128": "/emojis/128px/cowboy_hat_face.gif"
+      }
+    },
+    {
+      "id": "partying_face",
+      "emoji": "🥳",
+      "codepoint": "1F973",
+      "name_zh": "聚会笑脸",
+      "name_en": "partying face",
+      "urls": {
+        "32": "/emojis/32px/partying_face.gif",
+        "64": "/emojis/64px/partying_face.gif",
+        "128": "/emojis/128px/partying_face.gif"
+      }
+    },
+    {
+      "id": "smiling_face_with_sunglasses",
+      "emoji": "😎",
+      "codepoint": "1F60E",
+      "name_zh": "墨镜笑脸",
+      "name_en": "smiling face with sunglasses",
+      "urls": {
+        "32": "/emojis/32px/smiling_face_with_sunglasses.gif",
+        "64": "/emojis/64px/smiling_face_with_sunglasses.gif",
+        "128": "/emojis/128px/smiling_face_with_sunglasses.gif"
+      }
+    },
+    {
+      "id": "nerd_face",
+      "emoji": "🤓",
+      "codepoint": "1F913",
+      "name_zh": "书呆子脸",
+      "name_en": "nerd face",
+      "urls": {
+        "32": "/emojis/32px/nerd_face.gif",
+        "64": "/emojis/64px/nerd_face.gif",
+        "128": "/emojis/128px/nerd_face.gif"
+      }
+    },
+    {
+      "id": "face_with_monocle",
+      "emoji": "🧐",
+      "codepoint": "1F9D0",
+      "name_zh": "带单片眼镜的脸",
+      "name_en": "face with monocle",
+      "urls": {
+        "32": "/emojis/32px/face_with_monocle.gif",
+        "64": "/emojis/64px/face_with_monocle.gif",
+        "128": "/emojis/128px/face_with_monocle.gif"
+      }
+    },
+    {
+      "id": "frowning_face",
+      "emoji": "☹",
+      "codepoint": "2639",
+      "name_zh": "不满",
+      "name_en": "frowning face",
+      "urls": {
+        "32": "/emojis/32px/frowning_face.gif",
+        "64": "/emojis/64px/frowning_face.gif",
+        "128": "/emojis/128px/frowning_face.gif"
+      }
+    },
+    {
+      "id": "hushed_face",
+      "emoji": "😯",
+      "codepoint": "1F62F",
+      "name_zh": "缄默",
+      "name_en": "hushed face",
+      "urls": {
+        "32": "/emojis/32px/hushed_face.gif",
+        "64": "/emojis/64px/hushed_face.gif",
+        "128": "/emojis/128px/hushed_face.gif"
+      }
+    },
+    {
+      "id": "flushed_face",
+      "emoji": "😳",
+      "codepoint": "1F633",
+      "name_zh": "脸红",
+      "name_en": "flushed face",
+      "urls": {
+        "32": "/emojis/32px/flushed_face.gif",
+        "64": "/emojis/64px/flushed_face.gif",
+        "128": "/emojis/128px/flushed_face.gif"
+      }
+    },
+    {
+      "id": "pleading_face",
+      "emoji": "🥺",
+      "codepoint": "1F97A",
+      "name_zh": "恳求的脸",
+      "name_en": "pleading face",
+      "urls": {
+        "32": "/emojis/32px/pleading_face.gif",
+        "64": "/emojis/64px/pleading_face.gif",
+        "128": "/emojis/128px/pleading_face.gif"
+      }
+    },
+    {
+      "id": "crying_face",
+      "emoji": "😢",
+      "codepoint": "1F622",
+      "name_zh": "哭",
+      "name_en": "crying face",
+      "urls": {
+        "32": "/emojis/32px/crying_face.gif",
+        "64": "/emojis/64px/crying_face.gif",
+        "128": "/emojis/128px/crying_face.gif"
+      }
+    },
+    {
+      "id": "loudly_crying_face",
+      "emoji": "😭",
+      "codepoint": "1F62D",
+      "name_zh": "放声大哭",
+      "name_en": "loudly crying face",
+      "urls": {
+        "32": "/emojis/32px/loudly_crying_face.gif",
+        "64": "/emojis/64px/loudly_crying_face.gif",
+        "128": "/emojis/128px/loudly_crying_face.gif"
+      }
+    },
+    {
+      "id": "face_screaming_in_fear",
+      "emoji": "😱",
+      "codepoint": "1F631",
+      "name_zh": "吓死了",
+      "name_en": "face screaming in fear",
+      "urls": {
+        "32": "/emojis/32px/face_screaming_in_fear.gif",
+        "64": "/emojis/64px/face_screaming_in_fear.gif",
+        "128": "/emojis/128px/face_screaming_in_fear.gif"
+      }
+    },
+    {
+      "id": "weary_face",
+      "emoji": "😩",
+      "codepoint": "1F629",
+      "name_zh": "累死了",
+      "name_en": "weary face",
+      "urls": {
+        "32": "/emojis/32px/weary_face.gif",
+        "64": "/emojis/64px/weary_face.gif",
+        "128": "/emojis/128px/weary_face.gif"
+      }
+    },
+    {
+      "id": "yawning_face",
+      "emoji": "🥱",
+      "codepoint": "1F971",
+      "name_zh": "打呵欠",
+      "name_en": "yawning face",
+      "urls": {
+        "32": "/emojis/32px/yawning_face.gif",
+        "64": "/emojis/64px/yawning_face.gif",
+        "128": "/emojis/128px/yawning_face.gif"
+      }
+    },
+    {
+      "id": "face_with_steam_from_nose",
+      "emoji": "😤",
+      "codepoint": "1F624",
+      "name_zh": "傲慢",
+      "name_en": "face with steam from nose",
+      "urls": {
+        "32": "/emojis/32px/face_with_steam_from_nose.gif",
+        "64": "/emojis/64px/face_with_steam_from_nose.gif",
+        "128": "/emojis/128px/face_with_steam_from_nose.gif"
+      }
+    },
+    {
+      "id": "face_with_symbols_on_mouth",
+      "emoji": "🤬",
+      "codepoint": "1F92C",
+      "name_zh": "嘴上有符号的脸",
+      "name_en": "face with symbols on mouth",
+      "urls": {
+        "32": "/emojis/32px/face_with_symbols_on_mouth.gif",
+        "64": "/emojis/64px/face_with_symbols_on_mouth.gif",
+        "128": "/emojis/128px/face_with_symbols_on_mouth.gif"
+      }
+    },
+    {
+      "id": "smiling_face_with_horns",
+      "emoji": "😈",
+      "codepoint": "1F608",
+      "name_zh": "恶魔微笑",
+      "name_en": "smiling face with horns",
+      "urls": {
+        "32": "/emojis/32px/smiling_face_with_horns.gif",
+        "64": "/emojis/64px/smiling_face_with_horns.gif",
+        "128": "/emojis/128px/smiling_face_with_horns.gif"
+      }
+    },
+    {
+      "id": "pile_of_poo",
+      "emoji": "💩",
+      "codepoint": "1F4A9",
+      "name_zh": "大便",
+      "name_en": "pile of poo",
+      "urls": {
+        "32": "/emojis/32px/pile_of_poo.gif",
+        "64": "/emojis/64px/pile_of_poo.gif",
+        "128": "/emojis/128px/pile_of_poo.gif"
+      }
+    },
+    {
+      "id": "ghost",
+      "emoji": "👻",
+      "codepoint": "1F47B",
+      "name_zh": "鬼",
+      "name_en": "ghost",
+      "urls": {
+        "32": "/emojis/32px/ghost.gif",
+        "64": "/emojis/64px/ghost.gif",
+        "128": "/emojis/128px/ghost.gif"
+      }
+    },
+    {
+      "id": "alien",
+      "emoji": "👽",
+      "codepoint": "1F47D",
+      "name_zh": "外星人",
+      "name_en": "alien",
+      "urls": {
+        "32": "/emojis/32px/alien.gif",
+        "64": "/emojis/64px/alien.gif",
+        "128": "/emojis/128px/alien.gif"
+      }
+    },
+    {
+      "id": "robot",
+      "emoji": "🤖",
+      "codepoint": "1F916",
+      "name_zh": "机器人",
+      "name_en": "robot",
+      "urls": {
+        "32": "/emojis/32px/robot.gif",
+        "64": "/emojis/64px/robot.gif",
+        "128": "/emojis/128px/robot.gif"
+      }
+    },
+    {
+      "id": "cat_with_tears_of_joy",
+      "emoji": "😹",
+      "codepoint": "1F639",
+      "name_zh": "笑出眼泪的猫",
+      "name_en": "cat with tears of joy",
+      "urls": {
+        "32": "/emojis/32px/cat_with_tears_of_joy.gif",
+        "64": "/emojis/64px/cat_with_tears_of_joy.gif",
+        "128": "/emojis/128px/cat_with_tears_of_joy.gif"
+      }
+    },
+    {
+      "id": "see_no_evil_monkey",
+      "emoji": "🙈",
+      "codepoint": "1F648",
+      "name_zh": "非礼勿视",
+      "name_en": "see-no-evil monkey",
+      "urls": {
+        "32": "/emojis/32px/see_no_evil_monkey.gif",
+        "64": "/emojis/64px/see_no_evil_monkey.gif",
+        "128": "/emojis/128px/see_no_evil_monkey.gif"
+      }
+    },
+    {
+      "id": "hear_no_evil_monkey",
+      "emoji": "🙉",
+      "codepoint": "1F649",
+      "name_zh": "非礼勿听",
+      "name_en": "hear-no-evil monkey",
+      "urls": {
+        "32": "/emojis/32px/hear_no_evil_monkey.gif",
+        "64": "/emojis/64px/hear_no_evil_monkey.gif",
+        "128": "/emojis/128px/hear_no_evil_monkey.gif"
+      }
+    },
+    {
+      "id": "speak_no_evil_monkey",
+      "emoji": "🙊",
+      "codepoint": "1F64A",
+      "name_zh": "非礼勿言",
+      "name_en": "speak-no-evil monkey",
+      "urls": {
+        "32": "/emojis/32px/speak_no_evil_monkey.gif",
+        "64": "/emojis/64px/speak_no_evil_monkey.gif",
+        "128": "/emojis/128px/speak_no_evil_monkey.gif"
+      }
+    },
+    {
+      "id": "kiss_mark",
+      "emoji": "💋",
+      "codepoint": "1F48B",
+      "name_zh": "唇印",
+      "name_en": "kiss mark",
+      "urls": {
+        "32": "/emojis/32px/kiss_mark.gif",
+        "64": "/emojis/64px/kiss_mark.gif",
+        "128": "/emojis/128px/kiss_mark.gif"
+      }
+    },
+    {
+      "id": "heart_with_arrow",
+      "emoji": "💘",
+      "codepoint": "1F498",
+      "name_zh": "心中箭了",
+      "name_en": "heart with arrow",
+      "urls": {
+        "32": "/emojis/32px/heart_with_arrow.gif",
+        "64": "/emojis/64px/heart_with_arrow.gif",
+        "128": "/emojis/128px/heart_with_arrow.gif"
+      }
+    },
+    {
+      "id": "sparkling_heart",
+      "emoji": "💖",
+      "codepoint": "1F496",
+      "name_zh": "闪亮的心",
+      "name_en": "sparkling heart",
+      "urls": {
+        "32": "/emojis/32px/sparkling_heart.gif",
+        "64": "/emojis/64px/sparkling_heart.gif",
+        "128": "/emojis/128px/sparkling_heart.gif"
+      }
+    },
+    {
+      "id": "growing_heart",
+      "emoji": "💗",
+      "codepoint": "1F497",
+      "name_zh": "搏动的心",
+      "name_en": "growing heart",
+      "urls": {
+        "32": "/emojis/32px/growing_heart.gif",
+        "64": "/emojis/64px/growing_heart.gif",
+        "128": "/emojis/128px/growing_heart.gif"
+      }
+    },
+    {
+      "id": "revolving_hearts",
+      "emoji": "💞",
+      "codepoint": "1F49E",
+      "name_zh": "舞动的心",
+      "name_en": "revolving hearts",
+      "urls": {
+        "32": "/emojis/32px/revolving_hearts.gif",
+        "64": "/emojis/64px/revolving_hearts.gif",
+        "128": "/emojis/128px/revolving_hearts.gif"
+      }
+    },
+    {
+      "id": "broken_heart",
+      "emoji": "💔",
+      "codepoint": "1F494",
+      "name_zh": "心碎",
+      "name_en": "broken heart",
+      "urls": {
+        "32": "/emojis/32px/broken_heart.gif",
+        "64": "/emojis/64px/broken_heart.gif",
+        "128": "/emojis/128px/broken_heart.gif"
+      }
+    },
+    {
+      "id": "hundred_points",
+      "emoji": "💯",
+      "codepoint": "1F4AF",
+      "name_zh": "一百分",
+      "name_en": "hundred points",
+      "urls": {
+        "32": "/emojis/32px/hundred_points.gif",
+        "64": "/emojis/64px/hundred_points.gif",
+        "128": "/emojis/128px/hundred_points.gif"
+      }
+    },
+    {
+      "id": "collision",
+      "emoji": "💥",
+      "codepoint": "1F4A5",
+      "name_zh": "爆炸",
+      "name_en": "collision",
+      "urls": {
+        "32": "/emojis/32px/collision.gif",
+        "64": "/emojis/64px/collision.gif",
+        "128": "/emojis/128px/collision.gif"
+      }
+    },
+    {
+      "id": "thought_balloon",
+      "emoji": "💭",
+      "codepoint": "1F4AD",
+      "name_zh": "内心活动气泡",
+      "name_en": "thought balloon",
+      "urls": {
+        "32": "/emojis/32px/thought_balloon.gif",
+        "64": "/emojis/64px/thought_balloon.gif",
+        "128": "/emojis/128px/thought_balloon.gif"
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+folotoy/ai-passport 固件包 v2.6.0（固件工牌 MVP 版）
+生成日期：2026-11-22    芯片：ESP32-C3    Flash：8MB
+
+一、包内容
+  folotoy-ai-passport-2.6.0-merged.bin  合并镜像（推荐，单文件烧录）
+  flash.sh / flash.bat                  一键烧录脚本（Linux/macOS / Windows）
+  bins/                                 分区单独镜像（需要单独烧某个分区时用）
+
+二、烧录步骤
+  1. 安装依赖：pip install esptool
+  2. USB 连接设备，确认串口：
+     - Windows：设备管理器里看 COM 口
+     - Linux/macOS：ls /dev/ttyACM* 或 /dev/ttyUSB*
+  3. 执行：
+     - Windows：flash.bat COM3        （换成实际 COM 口）
+     - Linux/macOS：./flash.sh        （默认 /dev/ttyACM0，可传参换串口）
+  4. 烧录完成后设备自动重启。
+
+  等效手动命令（不用脚本时）：
+    python -m esptool --chip esp32c3 -b 460800 --before default-reset --after hard-reset \
+      --flash-mode dio --flash-size 8MB --flash-freq 80m -p <串口> \
+      write-flash 0x0 folotoy-ai-passport-2.6.0-merged.bin
+
+  分区单独烧录地址（bins/ 目录）：
+    0x0      bootloader.bin
+    0x8000   partition-table.bin
+    0xd000   ota_data_initial.bin
+    0x20000  xiaozhi.bin            （主程序）
+    0x600000 generated_assets.bin   （字体/图片资源，必须烧，否则 UI 无中文字体）
+
+三、联网与绑定（工牌模式）
+  - 设备开机后按板载流程配网（设备热点/BLUFI）。
+  - device_id 自动取 WiFi MAC（十六进制），无需手工配置。
+  - 服务端地址与设备令牌默认取编译期配置（record_ws_url / badge_api_url / device_token），
+    如需修改，通过 NVS settings 命名空间 mvp 下同名键覆盖。
+  - 工牌绑定：设备联网后在管理后台对该 device_id 配置工牌资料即可（PUT /api/v1/devices/{id}/badge）。
