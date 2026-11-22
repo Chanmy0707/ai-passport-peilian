@@ -4,9 +4,11 @@
 补传冲突（§8）：同 seq 内容不一致时以设备重传为准覆盖，返回 conflict=True 供调用方记警告日志。
 """
 import logging
+import wave
 from pathlib import Path
 
 from ..config import settings
+from ..practice.audio import CHANNELS, SAMPLE_RATE, decode_frame, make_decoder
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,31 @@ class AudioStore:
             elif seq > acked + 1:
                 break
         return acked
+
+    def write_playable_wav(self, session_id: str, seqs: list[int], out_name: str) -> Path | None:
+        """把分段的裸 Opus 帧解码为 WAV（浏览器可直接播放）；无法解码返回 None。"""
+        decoder = make_decoder()
+        if decoder is None:
+            return None
+        pcm = bytearray()
+        decoded = 0
+        for seq in seqs:
+            path = self.frame_path(session_id, seq)
+            if not path.exists():
+                continue
+            out = decode_frame(decoder, path.read_bytes())
+            if out:
+                pcm += out
+                decoded += 1
+        if not decoded:
+            return None
+        out_path = self.session_dir(session_id) / out_name
+        with wave.open(str(out_path), "wb") as w:
+            w.setnchannels(CHANNELS)
+            w.setsampwidth(2)
+            w.setframerate(SAMPLE_RATE)
+            w.writeframes(bytes(pcm))
+        return out_path
 
     def total_bytes(self, session_id: str) -> int:
         d = self.base_dir / session_id

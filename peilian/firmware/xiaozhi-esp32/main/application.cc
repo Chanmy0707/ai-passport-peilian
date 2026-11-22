@@ -133,6 +133,11 @@ void Application::Initialize() {
     board.SetNetworkEventCallback([this](NetworkEvent event, const std::string& data) {
         auto display = Board::GetInstance().GetDisplay();
 
+#ifdef CONFIG_BOARD_TYPE_FOLOTOY_AI_PASSPORT
+        // MVP 配网页需要网络事件（配网热点就绪回填 / 配网成功进主页面）
+        MvpApp::GetInstance().OnNetworkEvent(event);
+#endif
+
         switch (event) {
             case NetworkEvent::Scanning:
                 display->ShowNotification(Lang::Strings::SCANNING_WIFI, 30000);

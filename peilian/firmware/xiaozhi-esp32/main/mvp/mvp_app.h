@@ -18,6 +18,9 @@
 
 #include "record_client.h"  // BadgeProfile
 
+/* board.h 的网络事件（前向声明，避免头文件依赖） */
+enum class NetworkEvent;
+
 class MvpApp {
 public:
     static MvpApp& GetInstance();
@@ -43,6 +46,10 @@ public:
 
     /* 服务端消息入口（application.cc OnIncomingJson 转发 mcp/practice/stt/tts，主线程调用）。 */
     void OnServerMessage(const std::string& message_json);
+
+    /* 网络事件（application.cc 网络回调转发，非主线程；内部 Schedule 回主线程）：
+     * WifiConfigModeEnter→显示/回填配网页；Connected→配网页消失进主页面。 */
+    void OnNetworkEvent(NetworkEvent event);
 
 private:
     MvpApp() = default;
@@ -73,6 +80,11 @@ private:
     void SetSettingsVolume(int volume);  // 夹取 0-100 后写 Codec（内含 NVS 持久化）
     void DoFactoryReset();       // 擦 NVS + 重启
 
+    /* 配网页编排（开机未配网 / 设置里“Wi-Fi 重新配网”） */
+    void EnterProvisioning(bool from_settings);
+    void ExitProvisioning(bool to_settings);
+    void CancelProvisioning();
+
     /* 智能陪练编排 */
     enum class PracticeState {
         kNone,        // 非陪练
@@ -85,6 +97,7 @@ private:
     struct ScenarioItem {
         std::string id;
         std::string name;
+        std::string description;  // 场景简介（服务端 /scenarios，可为空）
         int duration_minutes = 10;
     };
 
@@ -120,6 +133,10 @@ private:
     // ---- 头像动图 ----
     std::string badge_avatar_id_;  // 当前界面显示的头像 emoji_id（空=姓名首字占位）
 
+    // ---- 配网状态 ----
+    bool provisioning_ = false;
+    bool provisioning_from_settings_ = false;
+
     // ---- 智能陪练状态 ----
     PracticeState practice_state_ = PracticeState::kNone;
     std::vector<ScenarioItem> scenarios_;
@@ -129,6 +146,7 @@ private:
     int pending_set_scenario_id_ = -1;
     int mcp_request_seq_ = 0;
     int connect_wait_ticks_ = 0;
+    bool connect_retried_ = false;  // 连接超时已自动重试一次（二次超时才回场景列表）
     int report_wait_ticks_ = 0;
     int remaining_s_ = 0;
     int64_t dialog_deadline_us_ = 0;  // 对话倒计时截止时刻（本地递减，服务端 tick 校准）

@@ -25,6 +25,8 @@
 #include <string>
 #include <vector>
 
+#include <esp_timer.h>
+
 #include "flash_ring.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -64,6 +66,8 @@ public:
 
     /* 工牌配置：HTTP GET /devices/{id}/badge（X-Device-Token），一次性任务执行，完成后回调。 */
     void FetchBadgeProfileAsync();
+    /* 未绑定（badge 无效）时每 kBadgeRetrySec 秒自动重拉：覆盖网络晚配、云端后绑定，无需重启设备。 */
+    void StartBadgeRetry();
     BadgeProfile GetBadgeProfile() const;
     void SetBadgeProfileCallback(std::function<void(const BadgeProfile&)> callback);
 
@@ -83,6 +87,8 @@ private:
     void EndSession();
 
     static void BadgeTaskEntry(void* arg);
+    static void BadgeRetryTimerCallback(void* arg);
+    void OnBadgeRetryTick();
     bool FetchBadgeProfile(BadgeProfile* out);
     void DeliverAvatar(const BadgeProfile& profile);
     bool DownloadAvatar(const std::string& url, std::vector<uint8_t>* out);
@@ -114,6 +120,7 @@ private:
     std::string session_id_;
 
     std::atomic<bool> badge_fetch_running_{false};
+    esp_timer_handle_t badge_retry_timer_ = nullptr;
     mutable std::mutex badge_mutex_;
     BadgeProfile badge_;
     std::function<void(const BadgeProfile&)> badge_callback_;

@@ -121,7 +121,10 @@ async def run() -> str:
     seg = segs[0]
     assert (seg["seq_start"], seg["seq_end"]) == (0, 2), f"分段 seq 区间异常: {seg}"
     assert seg["duration_ms"] == 3 * 60, f"分段时长异常: {seg}"
-    assert seg["file_url"] == f"/audio/{session_id}/000000-000002.opus", f"file_url 异常: {seg}"
+    assert seg["file_url"] in (
+        f"/audio/{session_id}/000000-000002.opus",
+        f"/audio/{session_id}/000000-000002.wav",
+    ), f"file_url 异常: {seg}"
     assert seg["status"] == "failed", f"分段应走 §8 降级标 failed: {seg}"
     assert (sess_dir / "000000-000002.opus").exists(), "合并分段文件缺失"
     assert n_transcript == 0, f"降级后不应有 transcript: {n_transcript}"

@@ -6,8 +6,8 @@
 - 空 MIMO_API_KEY 立即降级，不发起联网调用
 - run_quality_check()：质检 skill 扩展点占位，本期不实现
 
-合并文件：每段裸拼接 Opus 载荷存 audio/{session_id}/{seq_start:06d}-{seq_end:06d}.opus，
-file_url 直接指向该路径；Ogg 封装留 P2（TODO）。
+合并文件：每段裸拼接 Opus 载荷存 audio/{session_id}/{seq_start:06d}-{seq_end:06d}.opus（供 ASR）；
+同段解码生成 {seq_start:06d}-{seq_end:06d}.wav，file_url 指向 WAV 供浏览器播放，解码失败回落 .opus。
 """
 import base64
 import logging
@@ -96,7 +96,11 @@ async def _run(session_id: str) -> None:
         merged_path.write_bytes(
             b"".join(store.frame_path(session_id, s).read_bytes() for s in chunk)
         )
-        file_url = f"/audio/{session_id}/{merged_name}"
+        wav_path = store.write_playable_wav(session_id, chunk, f"{seq_start:06d}-{seq_end:06d}.wav")
+        if wav_path is not None:
+            file_url = f"/audio/{session_id}/{wav_path.name}"
+        else:
+            file_url = f"/audio/{session_id}/{merged_name}"
         duration_ms = len(chunk) * FRAME_DURATION_MS
 
         with get_db() as conn:

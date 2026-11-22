@@ -20,6 +20,7 @@
 static constexpr size_t kFrameQueueDepth = 8;
 static constexpr int kReconnectIntervalSec = 5;
 static constexpr int kHelloTimeoutMs = 10000;
+static constexpr uint64_t kBadgeRetryIntervalUs = 15 * 1000000ULL; /* 未绑定时 15s 重试 */
 
 RecordClient& RecordClient::GetInstance() {
     static RecordClient instance;
@@ -34,6 +35,34 @@ void RecordClient::Init() {
     events_ = xEventGroupCreate();
     FlashRing_Init();
     xTaskCreate(&RecordClient::TaskEntry, "mvp_record", 10240, this, 5, &task_);
+    StartBadgeRetry();
+}
+
+void RecordClient::StartBadgeRetry() {
+    if (badge_retry_timer_ != nullptr) {
+        return;
+    }
+    esp_timer_create_args_t args = {};
+    args.callback = &RecordClient::BadgeRetryTimerCallback;
+    args.arg = this;
+    args.name = "mvp_badge_retry";
+    if (esp_timer_create(&args, &badge_retry_timer_) != ESP_OK) {
+        ESP_LOGE(TAG, "badge 重试定时器创建失败");
+        return;
+    }
+    esp_timer_start_periodic(badge_retry_timer_, kBadgeRetryIntervalUs);
+}
+
+void RecordClient::BadgeRetryTimerCallback(void* arg) {
+    static_cast<RecordClient*>(arg)->OnBadgeRetryTick();
+}
+
+void RecordClient::OnBadgeRetryTick() {
+    /* 仅未绑定时重拉（esp_timer 任务上下文，FetchBadgeProfileAsync 只起任务不阻塞）：
+     * 网络晚配置/云端后绑定/拉取失败均在下个 tick 自动重试，成功后回调刷新界面。 */
+    if (!GetBadgeProfile().valid) {
+        FetchBadgeProfileAsync();
+    }
 }
 
 void RecordClient::StartRecording() {

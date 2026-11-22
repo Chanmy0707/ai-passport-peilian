@@ -1,7 +1,8 @@
 /* MVP 工牌模式 LVGL 界面实现（M3）。
  *
- * 只做表现：主菜单覆盖层 + 工牌页覆盖层（均挂在 lv_layer_top，不改小智既有对话页）。
- * 所有 LVGL 调用都在 DisplayLockGuard 内；录音计时用独立 esp_timer 周期刷新，
+ * 只做表现：主页面 + 配网页 + 陪练页 + 设置页（均挂在 lv_layer_top，不改小智既有对话页）。
+ * 主页面＝顶部状态栏（Wi-Fi 标志 + 时间）＋ 工牌卡 ＋ 底部区域（主菜单 / 录音态二选一）。
+ * 所有 LVGL 调用都在 DisplayLockGuard 内；状态栏与录音计时用独立 esp_timer 周期刷新，
  * 回调内先取显示锁再触碰 LVGL（与 lvgl_display 的 notification_timer_ 同一套路，
  * 避免与 LVGL 定时器的加锁顺序冲突）。
  */
@@ -11,17 +12,20 @@
 
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <memory>
 #include <string>
 
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <lvgl.h>
+#include <wifi_manager.h>
 
 #include "board.h"
 #include "display.h"
 #include "gif/lvgl_gif.h"
 #include "lvgl_font.h"
+#include "lvgl_theme.h"
 
 namespace {
 
@@ -36,7 +40,7 @@ lv_color_t ClrCard()   { return lv_color_make(24, 24, 30); }
 const char* kMenuLabels[4] = {
     "工牌",
     "智能陪练",
-    "日常对话",
+    "小智对话",
     "设置",
 };
 
@@ -103,15 +107,19 @@ struct MvpUi::Impl {
     int h = 320;
     const lv_font_t* font = nullptr;
 
-    // 主菜单
-    lv_obj_t* menu_root = nullptr;
+    // 主页面（全屏覆盖层）：顶部状态栏 + 工牌卡 + 底部（主菜单 / 录音态）
+    lv_obj_t* home_root = nullptr;
+    lv_obj_t* wifi_label = nullptr;  // Wi-Fi 标志（icon 字体）
+    lv_obj_t* time_label = nullptr;  // 顶部时间 HH:MM
+
+    // 底部主菜单（主菜单态）
+    lv_obj_t* menu_box = nullptr;
     lv_obj_t* menu_items[4] = {nullptr, nullptr, nullptr, nullptr};
     lv_obj_t* menu_labels[4] = {nullptr, nullptr, nullptr, nullptr};
     lv_obj_t* menu_hint = nullptr;
     int menu_selected = 0;
 
-    // 工牌页
-    lv_obj_t* badge_root = nullptr;
+    // 工牌卡 + 底部录音状态（工牌录音态）
     lv_obj_t* card = nullptr;
     lv_obj_t* avatar = nullptr;
     lv_obj_t* avatar_label = nullptr;
@@ -123,9 +131,19 @@ struct MvpUi::Impl {
     lv_obj_t* title_label = nullptr;
     lv_obj_t* emp_label = nullptr;
     lv_obj_t* qr_label = nullptr;
+    lv_obj_t* record_box = nullptr;
     lv_obj_t* status_bar = nullptr;
     lv_obj_t* status_label = nullptr;
+    bool menu_visible = false;
     bool badge_visible = false;
+
+    // 配网页（Wi-Fi 配网提示）
+    lv_obj_t* prov_root = nullptr;
+    lv_obj_t* prov_ssid_label = nullptr;
+    lv_obj_t* prov_url_label = nullptr;
+    lv_obj_t* prov_exit_hint = nullptr;
+    std::string prov_ssid;
+    std::string prov_url;
 
     // 陪练页（内容随 PracticeView 整体重建）
     lv_obj_t* practice_root = nullptr;
@@ -141,6 +159,8 @@ struct MvpUi::Impl {
     void EnsureObjects();
     void ApplyMenuStyle();
     void RefreshStatus();
+    void RefreshTopbar();
+    void RefreshProvisioning();
     void ApplyAvatarGif(std::vector<uint8_t>&& data);
     void BuildPractice();
     void BuildSettings();
@@ -194,7 +214,7 @@ lv_obj_t* MvpUi::Impl::MakeCenteredLabel(lv_obj_t* parent, const char* text) {
 }
 
 void MvpUi::Impl::EnsureObjects() {
-    if (menu_root != nullptr) {
+    if (home_root != nullptr) {
         return;
     }
     auto* display = Board::GetInstance().GetDisplay();
@@ -206,48 +226,43 @@ void MvpUi::Impl::EnsureObjects() {
 
     lv_obj_t* top = lv_layer_top();
 
-    // ---- 主菜单 ----
-    menu_root = lv_obj_create(top);
-    lv_obj_remove_flag(menu_root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(menu_root, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_pos(menu_root, 0, 0);
-    lv_obj_set_size(menu_root, w, h);
-    lv_obj_set_style_bg_opa(menu_root, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(menu_root, ClrBg(), 0);
-    lv_obj_set_style_border_width(menu_root, 0, 0);
-    lv_obj_set_style_radius(menu_root, 0, 0);
-    lv_obj_set_style_pad_all(menu_root, 0, 0);
+    // ---- 主页面（全屏覆盖层）----
+    home_root = lv_obj_create(top);
+    lv_obj_remove_flag(home_root, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(home_root, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_pos(home_root, 0, 0);
+    lv_obj_set_size(home_root, w, h);
+    lv_obj_set_style_bg_opa(home_root, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(home_root, ClrBg(), 0);
+    lv_obj_set_style_border_width(home_root, 0, 0);
+    lv_obj_set_style_radius(home_root, 0, 0);
+    lv_obj_set_style_pad_all(home_root, 0, 0);
 
-    MakeLabel(menu_root, "主菜单", 0, 18, w);
-    for (int i = 0; i < 4; i++) {
-        menu_items[i] = MakeBox(menu_root, 24, 72 + i * 54, w - 48, 48);
-        lv_obj_set_flex_flow(menu_items[i], LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(menu_items[i], LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER);
-        menu_labels[i] = MakeCenteredLabel(menu_items[i], kMenuLabels[i]);
+    // 顶部状态栏：Wi-Fi 标志 + 时间（《MVP设计文档.md》主页面）
+    lv_obj_t* topbar = MakeBox(home_root, 0, 0, w, 30);
+    lv_obj_set_style_bg_opa(topbar, LV_OPA_TRANSP, 0);
+    wifi_label = lv_label_create(topbar);
+    lv_obj_set_style_text_color(wifi_label, ClrText(), 0);
+    lv_label_set_text(wifi_label, "");
+    lv_obj_set_pos(wifi_label, 10, 1);
+    time_label = lv_label_create(topbar);
+    if (font != nullptr) {
+        lv_obj_set_style_text_font(time_label, font, 0);
     }
-    menu_hint = MakeLabel(menu_root, "OK 进入    长按返回", 0, h - 36, w);
-    lv_obj_set_style_text_color(menu_hint, ClrDim(), 0);
+    lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_color(time_label, ClrText(), 0);
+    lv_label_set_text(time_label, "--:--");
+    lv_obj_set_width(time_label, 100);
+    lv_obj_set_pos(time_label, w - 110, 1);
 
-    // ---- 工牌页 ----
-    badge_root = lv_obj_create(top);
-    lv_obj_remove_flag(badge_root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(badge_root, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_pos(badge_root, 0, 0);
-    lv_obj_set_size(badge_root, w, h);
-    lv_obj_set_style_bg_opa(badge_root, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(badge_root, ClrBg(), 0);
-    lv_obj_set_style_border_width(badge_root, 0, 0);
-    lv_obj_set_style_radius(badge_root, 0, 0);
-    lv_obj_set_style_pad_all(badge_root, 0, 0);
-
-    card = MakeBox(badge_root, 12, 20, w - 24, 178);
+    // ---- 工牌卡（动图/姓名/职位/工号/二维码，主页面中部）----
+    card = MakeBox(home_root, 12, 32, w - 24, 156);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(card, ClrCard(), 0);
     lv_obj_set_style_radius(card, 16, 0);
 
     int card_w = w - 24;
-    avatar = MakeBox(card, (card_w - 64) / 2, 14, 64, 64);
+    avatar = MakeBox(card, (card_w - 52) / 2, 8, 52, 52);
     lv_obj_set_style_radius(avatar, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(avatar, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(avatar, ClrAccent(), 0);
@@ -256,15 +271,32 @@ void MvpUi::Impl::EnsureObjects() {
     avatar_label = MakeCenteredLabel(avatar, "?");
     lv_obj_set_style_text_color(avatar_label, ClrBg(), 0);
 
-    name_label = MakeLabel(card, "", 8, 88, card_w - 16);
-    title_label = MakeLabel(card, "", 8, 114, card_w - 16);
+    name_label = MakeLabel(card, "", 8, 62, card_w - 16);
+    title_label = MakeLabel(card, "", 8, 88, card_w - 16);
     lv_obj_set_style_text_color(title_label, ClrDim(), 0);
-    emp_label = MakeLabel(card, "", 8, 138, card_w - 16);
+    emp_label = MakeLabel(card, "", 8, 112, card_w - 16);
     lv_obj_set_style_text_color(emp_label, ClrDim(), 0);
-    qr_label = MakeLabel(card, "", 8, 158, card_w - 16);
+    qr_label = MakeLabel(card, "", 8, 132, card_w - 16);
     lv_obj_set_style_text_color(qr_label, ClrDim(), 0);
 
-    status_bar = MakeBox(badge_root, 20, 210, w - 40, 54);
+    // ---- 底部主菜单（主菜单态）：UP/DOWN 选择、OK 进入 ----
+    menu_box = MakeBox(home_root, 0, h - 128, w, 128);
+    lv_obj_set_style_bg_opa(menu_box, LV_OPA_TRANSP, 0);
+    for (int i = 0; i < 4; i++) {
+        menu_items[i] = MakeBox(menu_box, 16, 2 + i * 26, w - 32, 24);
+        lv_obj_set_flex_flow(menu_items[i], LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(menu_items[i], LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER);
+        menu_labels[i] = MakeCenteredLabel(menu_items[i], kMenuLabels[i]);
+    }
+    menu_hint = MakeLabel(menu_box, "UP/DOWN 选择    OK 进入", 0, 104, w);
+    lv_obj_set_style_text_color(menu_hint, ClrDim(), 0);
+
+    // ---- 底部录音状态（工牌录音态）----
+    record_box = MakeBox(home_root, 0, h - 128, w, 128);
+    lv_obj_set_style_bg_opa(record_box, LV_OPA_TRANSP, 0);
+    lv_obj_add_flag(record_box, LV_OBJ_FLAG_HIDDEN);
+    status_bar = MakeBox(record_box, 16, 8, w - 32, 56);
     lv_obj_set_flex_flow(status_bar, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(status_bar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
@@ -273,7 +305,7 @@ void MvpUi::Impl::EnsureObjects() {
     status_label = MakeCenteredLabel(status_bar, "OK 开始录音");
     lv_obj_set_style_text_color(status_label, ClrAccent(), 0);
 
-    lv_obj_t* badge_hint = MakeLabel(badge_root, "OK 录音/停止    长按菜单", 0, h - 32, w);
+    lv_obj_t* badge_hint = MakeLabel(record_box, "OK 录音/停止    长按菜单", 0, 104, w);
     lv_obj_set_style_text_color(badge_hint, ClrDim(), 0);
 
     // ---- 陪练页（内容由 BuildPractice 动态重建）----
@@ -301,6 +333,35 @@ void MvpUi::Impl::EnsureObjects() {
     lv_obj_set_style_radius(settings_root, 0, 0);
     lv_obj_set_style_pad_all(settings_root, 0, 0);
     lv_obj_add_flag(settings_root, LV_OBJ_FLAG_HIDDEN);
+
+    // ---- 配网页（Wi-Fi 配网提示）----
+    prov_root = lv_obj_create(top);
+    lv_obj_remove_flag(prov_root, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(prov_root, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_pos(prov_root, 0, 0);
+    lv_obj_set_size(prov_root, w, h);
+    lv_obj_set_style_bg_opa(prov_root, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(prov_root, ClrBg(), 0);
+    lv_obj_set_style_border_width(prov_root, 0, 0);
+    lv_obj_set_style_radius(prov_root, 0, 0);
+    lv_obj_set_style_pad_all(prov_root, 0, 0);
+    lv_obj_add_flag(prov_root, LV_OBJ_FLAG_HIDDEN);
+
+    MakeLabel(prov_root, "Wi-Fi 配网", 0, 18, w);
+    lv_obj_t* prov_step1 = MakeLabel(prov_root, "手机连接热点", 16, 64, w - 32);
+    lv_obj_set_style_text_align(prov_step1, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_color(prov_step1, ClrDim(), 0);
+    prov_ssid_label = MakeLabel(prov_root, "", 16, 92, w - 32);
+    lv_obj_set_style_text_color(prov_ssid_label, ClrAccent(), 0);
+    lv_obj_t* prov_step2 = MakeLabel(prov_root, "浏览器打开配置页", 16, 140, w - 32);
+    lv_obj_set_style_text_align(prov_step2, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_color(prov_step2, ClrDim(), 0);
+    prov_url_label = MakeLabel(prov_root, "", 16, 168, w - 32);
+    lv_obj_set_style_text_color(prov_url_label, ClrAccent(), 0);
+    lv_obj_t* prov_tip = MakeLabel(prov_root, "配网成功后自动进入主页面", 0, 232, w);
+    lv_obj_set_style_text_color(prov_tip, ClrDim(), 0);
+    prov_exit_hint = MakeLabel(prov_root, "长按 OK 返回设置", 0, h - 32, w);
+    lv_obj_set_style_text_color(prov_exit_hint, ClrDim(), 0);
 
     ApplyMenuStyle();
 }
@@ -354,6 +415,12 @@ void MvpUi::Impl::BuildPractice() {
             if (sel) {
                 lv_obj_set_style_text_color(label, ClrBg(), 0);
             }
+        }
+        if (!v.scenario_detail.empty()) {
+            lv_obj_t* detail =
+                MakeLabel(practice_root, v.scenario_detail.c_str(), 20, 56 + count * 50 + 2, w - 40);
+            lv_label_set_long_mode(detail, LV_LABEL_LONG_DOT);  // 超长省略号，不挤占提示行
+            lv_obj_set_style_text_color(detail, ClrDim(), 0);
         }
         MakeLabel(practice_root, "OK 开始陪练    长按返回菜单", 0, h - 32, w);
     } else if (v.page == PracticeView::Page::kDialog) {
@@ -502,6 +569,7 @@ void MvpUi::Impl::Tick() {
     if (!guard) {
         return;
     }
+    RefreshTopbar();
     RefreshStatus();
 }
 
@@ -539,21 +607,30 @@ void MvpUi::ShowMenu(int selected) {
     }
     impl_->EnsureObjects();
     impl_->menu_selected = (selected < 0 || selected > 3) ? 0 : selected;
-    if (impl_->badge_root != nullptr) {
-        lv_obj_add_flag(impl_->badge_root, LV_OBJ_FLAG_HIDDEN);
-    }
-    impl_->badge_visible = false;
     if (impl_->practice_root != nullptr) {
         lv_obj_add_flag(impl_->practice_root, LV_OBJ_FLAG_HIDDEN);
     }
     if (impl_->settings_root != nullptr) {
         lv_obj_add_flag(impl_->settings_root, LV_OBJ_FLAG_HIDDEN);
     }
-    impl_->StopTick();
-    if (impl_->menu_root != nullptr) {
-        lv_obj_remove_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
+    if (impl_->prov_root != nullptr) {
+        lv_obj_add_flag(impl_->prov_root, LV_OBJ_FLAG_HIDDEN);
     }
+    // 主菜单态：底部显示主菜单，隐藏录音区
+    if (impl_->menu_box != nullptr) {
+        lv_obj_remove_flag(impl_->menu_box, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->record_box != nullptr) {
+        lv_obj_add_flag(impl_->record_box, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->home_root != nullptr) {
+        lv_obj_remove_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    impl_->menu_visible = true;
+    impl_->badge_visible = false;
     impl_->ApplyMenuStyle();
+    impl_->RefreshTopbar();
+    impl_->StartTick();
 }
 
 void MvpUi::SetMenuSelected(int selected) {
@@ -582,8 +659,14 @@ void MvpUi::HideMenu() {
     if (!guard) {
         return;
     }
-    if (impl_ != nullptr && impl_->menu_root != nullptr) {
-        lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
+    if (impl_ == nullptr) {
+        return;
+    }
+    impl_->StopTick();
+    impl_->menu_visible = false;
+    impl_->badge_visible = false;
+    if (impl_->home_root != nullptr) {
+        lv_obj_add_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -600,20 +683,29 @@ void MvpUi::ShowBadge() {
         impl_ = new Impl();
     }
     impl_->EnsureObjects();
-    if (impl_->menu_root != nullptr) {
-        lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
-    }
     if (impl_->practice_root != nullptr) {
         lv_obj_add_flag(impl_->practice_root, LV_OBJ_FLAG_HIDDEN);
     }
     if (impl_->settings_root != nullptr) {
         lv_obj_add_flag(impl_->settings_root, LV_OBJ_FLAG_HIDDEN);
     }
-    if (impl_->badge_root != nullptr) {
-        lv_obj_remove_flag(impl_->badge_root, LV_OBJ_FLAG_HIDDEN);
+    if (impl_->prov_root != nullptr) {
+        lv_obj_add_flag(impl_->prov_root, LV_OBJ_FLAG_HIDDEN);
     }
+    // 工牌录音态：底部显示录音状态区，隐藏主菜单
+    if (impl_->menu_box != nullptr) {
+        lv_obj_add_flag(impl_->menu_box, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->record_box != nullptr) {
+        lv_obj_remove_flag(impl_->record_box, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->home_root != nullptr) {
+        lv_obj_remove_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    impl_->menu_visible = false;
     impl_->badge_visible = true;
     impl_->StartTick();
+    impl_->RefreshTopbar();
     impl_->RefreshStatus();
 }
 
@@ -630,9 +722,10 @@ void MvpUi::HideBadge() {
         return;
     }
     impl_->StopTick();
+    impl_->menu_visible = false;
     impl_->badge_visible = false;
-    if (impl_->badge_root != nullptr) {
-        lv_obj_add_flag(impl_->badge_root, LV_OBJ_FLAG_HIDDEN);
+    if (impl_->home_root != nullptr) {
+        lv_obj_add_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -710,7 +803,7 @@ void MvpUi::Impl::ApplyAvatarGif(std::vector<uint8_t>&& data) {
     }
     if (avatar_img == nullptr) {
         avatar_img = lv_image_create(avatar);
-        lv_obj_set_size(avatar_img, 64, 64);
+        lv_obj_set_size(avatar_img, 52, 52);
         lv_obj_center(avatar_img);
     }
     avatar_gif->SetFrameCallback([this]() {
@@ -765,6 +858,7 @@ void MvpUi::Update() {
     if (impl_ == nullptr) {
         return;
     }
+    impl_->RefreshTopbar();
     impl_->RefreshStatus();
 }
 
@@ -781,16 +875,17 @@ void MvpUi::ShowPractice(const PracticeView& view) {
         impl_ = new Impl();
     }
     impl_->EnsureObjects();
-    if (impl_->menu_root != nullptr) {
-        lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
+    if (impl_->home_root != nullptr) {
+        lv_obj_add_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
     }
-    if (impl_->badge_root != nullptr) {
-        lv_obj_add_flag(impl_->badge_root, LV_OBJ_FLAG_HIDDEN);
-    }
+    impl_->menu_visible = false;
     impl_->badge_visible = false;
     impl_->StopTick();
     if (impl_->settings_root != nullptr) {
         lv_obj_add_flag(impl_->settings_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->prov_root != nullptr) {
+        lv_obj_add_flag(impl_->prov_root, LV_OBJ_FLAG_HIDDEN);
     }
     impl_->practice_view = view;
     impl_->BuildPractice();
@@ -826,15 +921,16 @@ void MvpUi::ShowSettings(const SettingsView& view) {
         impl_ = new Impl();
     }
     impl_->EnsureObjects();
-    if (impl_->menu_root != nullptr) {
-        lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
+    if (impl_->home_root != nullptr) {
+        lv_obj_add_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
     }
-    if (impl_->badge_root != nullptr) {
-        lv_obj_add_flag(impl_->badge_root, LV_OBJ_FLAG_HIDDEN);
-    }
+    impl_->menu_visible = false;
     impl_->badge_visible = false;
     if (impl_->practice_root != nullptr) {
         lv_obj_add_flag(impl_->practice_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->prov_root != nullptr) {
+        lv_obj_add_flag(impl_->prov_root, LV_OBJ_FLAG_HIDDEN);
     }
     impl_->StopTick();
     impl_->settings_view = view;
@@ -856,4 +952,131 @@ void MvpUi::HideSettings() {
     if (impl_ != nullptr && impl_->settings_root != nullptr) {
         lv_obj_add_flag(impl_->settings_root, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+void MvpUi::ShowProvisioning(const std::string& ap_ssid, const std::string& ap_url, bool allow_exit) {
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+    DisplayLockGuard guard(display);
+    if (!guard) {
+        return;
+    }
+    if (impl_ == nullptr) {
+        impl_ = new Impl();
+    }
+    impl_->EnsureObjects();
+    impl_->prov_ssid = ap_ssid;
+    impl_->prov_url = ap_url;
+    // 配网页全屏覆盖其余页面
+    if (impl_->home_root != nullptr) {
+        lv_obj_add_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->practice_root != nullptr) {
+        lv_obj_add_flag(impl_->practice_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->settings_root != nullptr) {
+        lv_obj_add_flag(impl_->settings_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    impl_->menu_visible = false;
+    impl_->badge_visible = false;
+    impl_->StopTick();
+    if (impl_->prov_exit_hint != nullptr) {
+        if (allow_exit) {
+            lv_obj_remove_flag(impl_->prov_exit_hint, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(impl_->prov_exit_hint, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    impl_->RefreshProvisioning();
+    if (impl_->prov_root != nullptr) {
+        lv_obj_remove_flag(impl_->prov_root, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void MvpUi::SetProvisioningInfo(const std::string& ap_ssid, const std::string& ap_url) {
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+    DisplayLockGuard guard(display);
+    if (!guard) {
+        return;
+    }
+    if (impl_ == nullptr) {
+        return;
+    }
+    impl_->prov_ssid = ap_ssid;
+    impl_->prov_url = ap_url;
+    impl_->RefreshProvisioning();
+}
+
+void MvpUi::HideProvisioning() {
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+    DisplayLockGuard guard(display);
+    if (!guard) {
+        return;
+    }
+    if (impl_ != nullptr && impl_->prov_root != nullptr) {
+        lv_obj_add_flag(impl_->prov_root, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* 配网页内容回填：AP 未起来时显示“正在开启配网热点…”，起来后显示热点名 + 配网地址。 */
+void MvpUi::Impl::RefreshProvisioning() {
+    if (prov_ssid_label == nullptr) {
+        return;
+    }
+    if (prov_ssid.empty()) {
+        lv_label_set_text(prov_ssid_label, "正在开启配网热点…");
+        lv_obj_set_style_text_color(prov_ssid_label, ClrDim(), 0);
+        lv_label_set_text(prov_url_label, "");
+    } else {
+        lv_label_set_text(prov_ssid_label, prov_ssid.c_str());
+        lv_obj_set_style_text_color(prov_ssid_label, ClrAccent(), 0);
+        lv_label_set_text(prov_url_label, prov_url.c_str());
+    }
+}
+
+/* 顶部状态栏刷新：Wi-Fi 标志（icon 字体网络状态图标）+ 时间（未同步显示 --:--）。 */
+void MvpUi::Impl::RefreshTopbar() {
+    if (wifi_label == nullptr || time_label == nullptr) {
+        return;
+    }
+    const lv_font_t* icon_font = nullptr;
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display != nullptr) {
+        auto* theme = static_cast<LvglTheme*>(display->GetTheme());
+        if (theme != nullptr) {
+            auto tf = theme->icon_font();
+            if (tf) {
+                icon_font = tf->font();
+            }
+        }
+    }
+    const char* icon = Board::GetInstance().GetNetworkStateIcon();
+    if (icon_font != nullptr && icon != nullptr && icon[0] != '\0') {
+        lv_obj_set_style_text_font(wifi_label, icon_font, 0);
+        lv_label_set_text(wifi_label, icon);
+        lv_obj_set_style_text_color(wifi_label,
+                                    WifiManager::GetInstance().IsConnected() ? ClrAccent() : ClrDim(),
+                                    0);
+    } else {
+        lv_label_set_text(wifi_label, "");
+    }
+
+    time_t now = time(nullptr);
+    struct tm tm_now = {};
+    localtime_r(&now, &tm_now);
+    char buf[8];
+    if (tm_now.tm_year + 1900 >= 2025) {  // 系统时间已同步（OTA server_time）
+        std::snprintf(buf, sizeof(buf), "%02d:%02d", tm_now.tm_hour, tm_now.tm_min);
+    } else {
+        std::snprintf(buf, sizeof(buf), "--:--");
+    }
+    lv_label_set_text(time_label, buf);
 }

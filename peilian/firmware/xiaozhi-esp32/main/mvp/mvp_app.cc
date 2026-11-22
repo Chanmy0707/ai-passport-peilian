@@ -23,6 +23,9 @@
 #include "system_info.h"
 #include "wifi_board.h"
 
+#include <ssid_manager.h>
+#include <wifi_manager.h>
+
 #define TAG "mvp_app"
 
 namespace {
@@ -44,8 +47,9 @@ int CurrentOutputVolume() {
     return codec != nullptr ? codec->output_volume() : 0;
 }
 
-/* 陪练连接/评分等待超时（250ms 一定时器 tick）：连接 40=10s，评分 20=5s。 */
-constexpr int kConnectTimeoutTicks = 40;
+/* 陪练连接/评分等待超时（250ms 一定时器 tick）：连接 100=25s，评分 20=5s。
+ * 连接超时放宽到 25s：frpc 穿透链路抖动时 10s 常误判，配合超时自动重试。 */
+constexpr int kConnectTimeoutTicks = 100;
 constexpr int kReportTimeoutTicks = 20;
 
 std::atomic<bool> g_practice_fetch_running{false};
@@ -78,6 +82,12 @@ void MvpApp::Init() {
             OnAvatarGif(emoji_id, std::move(gif));
         });
 
+    // 开机未配网：先显示配网页，配网成功后再进主页面
+    if (SsidManager::GetInstance().GetSsidList().empty()) {
+        EnterProvisioning(false);
+        return;
+    }
+
     // 按上次模式进入：上次为对话则直进对话，否则开主菜单
     Settings settings("mvp", true);
     if (settings.GetString("last_mode", "") == "chat") {
@@ -89,6 +99,17 @@ void MvpApp::Init() {
 }
 
 bool MvpApp::HandleKey(int key, bool long_press) {
+    if (provisioning_) {
+        // 配网页：仅设置进入时长按 OK 取消（回退原网络并返回设置）
+        if (key == 2) {
+            if (long_press && provisioning_from_settings_) {
+                CancelProvisioning();
+            }
+            return true;
+        }
+        return false;  // UP/DOWN 走默认音量
+    }
+
     if (menu_open_) {
         if (key == 2) {  // OK
             if (long_press) {
@@ -392,9 +413,9 @@ void MvpApp::EnterSettingsItem() {
             settings_page_ = SettingsPage::kVolume;
             break;
         case kSettingsItemWifi:
-            // 重新配网：板级进 Blufi/AP 配网模式（自带提示与配网流程，线程安全）
-            static_cast<WifiBoard&>(Board::GetInstance()).EnterWifiConfigMode();
-            break;
+            // 重新配网：跳转配网页 + 板级进 AP 配网模式
+            EnterProvisioning(true);
+            return;  // 配网页接管界面，勿再 RenderSettings
         case kSettingsItemReset:
             settings_page_ = SettingsPage::kConfirmReset;
             break;
@@ -438,6 +459,61 @@ void MvpApp::DoFactoryReset() {
     }
     nvs_flash_init();
     esp_restart();
+}
+
+/* ================= 配网页（开机未配网 / 设置里“Wi-Fi 重新配网”） ================= */
+
+void MvpApp::EnterProvisioning(bool from_settings) {
+    provisioning_ = true;
+    provisioning_from_settings_ = from_settings;
+    if (from_settings) {
+        static_cast<WifiBoard&>(Board::GetInstance()).EnterWifiConfigMode();
+    }
+    auto& wifi = WifiManager::GetInstance();
+    MvpUi::GetInstance().ShowProvisioning(wifi.GetApSsid(), wifi.GetApWebUrl(), from_settings);
+}
+
+void MvpApp::ExitProvisioning(bool to_settings) {
+    if (!provisioning_) {
+        return;
+    }
+    provisioning_ = false;
+    MvpUi::GetInstance().HideProvisioning();
+    if (to_settings) {
+        settings_page_ = SettingsPage::kMenu;
+        RenderSettings();
+    } else {
+        OpenMenu();
+    }
+}
+
+void MvpApp::CancelProvisioning() {
+    auto& wifi = WifiManager::GetInstance();
+    wifi.StopConfigAp();
+    if (!SsidManager::GetInstance().GetSsidList().empty()) {
+        wifi.StartStation();
+    }
+    ExitProvisioning(true);
+}
+
+void MvpApp::OnNetworkEvent(NetworkEvent event) {
+    Application::GetInstance().Schedule([this, event]() {
+        if (event == NetworkEvent::WifiConfigModeEnter) {
+            // 配网热点就绪：回填热点名/配网地址（可能由板级流程自行开启）
+            if (!provisioning_) {
+                provisioning_from_settings_ = false;
+                provisioning_ = true;
+            }
+            auto& wifi = WifiManager::GetInstance();
+            MvpUi::GetInstance().ShowProvisioning(wifi.GetApSsid(), wifi.GetApWebUrl(),
+                                                 provisioning_from_settings_);
+        } else if (event == NetworkEvent::Connected) {
+            // 配网成功：从设置进入的回设置菜单，否则进主页面
+            if (provisioning_) {
+                ExitProvisioning(provisioning_from_settings_ && ModeManager_GetMode() == MODE_SETTINGS);
+            }
+        }
+    });
 }
 
 void MvpApp::OnBadgeProfile(const BadgeProfile& profile) {
@@ -517,6 +593,7 @@ void MvpApp::PracticeFetchTask(void* arg) {
                         cJSON_ArrayForEach (it, root) {
                             cJSON* sid = cJSON_GetObjectItem(it, "scenario_id");
                             cJSON* name = cJSON_GetObjectItem(it, "name");
+                            cJSON* desc = cJSON_GetObjectItem(it, "description");
                             cJSON* dur = cJSON_GetObjectItem(it, "duration_minutes");
                             if (!cJSON_IsString(sid) || !cJSON_IsString(name)) {
                                 continue;
@@ -524,6 +601,9 @@ void MvpApp::PracticeFetchTask(void* arg) {
                             ScenarioItem s;
                             s.id = sid->valuestring;
                             s.name = name->valuestring;
+                            if (cJSON_IsString(desc)) {
+                                s.description = desc->valuestring;
+                            }
                             if (cJSON_IsNumber(dur) && dur->valueint > 0) {
                                 s.duration_minutes = dur->valueint;
                             }
@@ -573,6 +653,7 @@ void MvpApp::BeginDialog(const ScenarioItem& scenario) {
     set_scenario_sent_ = false;
     pending_set_scenario_id_ = -1;
     connect_wait_ticks_ = 0;
+    connect_retried_ = false;
     practice_toast_.clear();
 
     // 连接切换：缓存原连接配置 → 写陪练端点（设计 §1.4，version 必须为 3）
@@ -596,13 +677,23 @@ void MvpApp::OnPracticeTick() {
         DeviceState state = Application::GetInstance().GetDeviceState();
         if (!set_scenario_sent_ && state == kDeviceStateListening) {
             // 通道就绪：发 set_scenario，随后停听等角色开场
+            practice_toast_.clear();
             SendSetScenario(dialog_scenario_);
             set_scenario_sent_ = true;
             Application::GetInstance().StopListening();
         } else if (connect_wait_ticks_ >= kConnectTimeoutTicks) {
-            practice_toast_ = "连接陪练服务超时";
-            BackToScenarios();
-            return;
+            if (connect_retried_) {
+                practice_toast_ = "连接陪练服务超时";
+                BackToScenarios();
+                return;
+            }
+            // 首次超时自动重连重试一次（链路抖动时二次握手常可恢复）
+            connect_retried_ = true;
+            connect_wait_ticks_ = 0;
+            set_scenario_sent_ = false;
+            practice_toast_ = "网络不稳定，正在重试";
+            Application::GetInstance().CloseAudioChannel();
+            Application::GetInstance().StartListening();
         }
         RenderPractice();
     } else if (practice_state_ == PracticeState::kDialog) {
@@ -675,6 +766,14 @@ void MvpApp::RenderPractice() {
             v.scenario_items.push_back(s.name);
         }
         v.selected = scenario_selected_;
+        // 选中场景的时长+简介（场景列表下方显示）
+        if (scenario_selected_ >= 0 && scenario_selected_ < static_cast<int>(scenarios_.size())) {
+            const ScenarioItem& s = scenarios_[scenario_selected_];
+            char dur[16];
+            std::snprintf(dur, sizeof(dur), "%d 分钟", s.duration_minutes);
+            v.scenario_detail =
+                s.description.empty() ? dur : std::string(dur) + " · " + s.description;
+        }
     } else if (practice_state_ == PracticeState::kScore) {
         v.page = PracticeView::Page::kScore;
         if (overall_score_ >= 0) {

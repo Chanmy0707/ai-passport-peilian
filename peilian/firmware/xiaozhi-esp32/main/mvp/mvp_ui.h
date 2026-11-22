@@ -1,12 +1,14 @@
 /* MVP 工牌模式 LVGL 界面（M3）。
  *
  * 负责渲染（只管表现，不管业务编排）：
- *   - 主菜单覆盖层（lv_layer_top）：工牌 / 智能陪练 / 对话 / 设置，含选中高亮。
- *   - 工牌页：BadgeProfile 名片 + QR 文本 + 录音状态/计时。
+ *   - 主页面（lv_layer_top 全屏覆盖层）：顶部状态栏（Wi-Fi 标志 + 时间）+
+ *     工牌卡（动图/姓名/职位/工号/二维码）+ 底部区域两态之一。
+ *     底部两态：主菜单（工牌 / 智能陪练 / 小智对话 / 设置，UP/DOWN 选择、OK 进入）
+ *     或工牌录音态（录音状态/计时 + 按键提示）。
+ *   - 配网页：Wi-Fi 配网提示（热点名 + 配网地址），开机未配网或设置里重新配网时显示。
  *   - 智能陪练页：场景选择 / 对话 / 评分三页面。
  *   - 设置页：设置菜单 + 设备信息 / 音量 / 恢复出厂确认子页。
- *   - 底部按键提示条。
- * 所有 LVGL 操作在 DisplayLockGuard 内进行；内部 1s esp_timer 刷新录音计时。
+ * 所有 LVGL 操作在 DisplayLockGuard 内进行；内部 1s esp_timer 刷新状态栏与录音计时。
  * 业务逻辑（模式切换、录音开关、按键分发）在 MvpApp。
  */
 #pragma once
@@ -24,6 +26,7 @@ struct PracticeView {
     Page page = Page::kScenarios;
     std::vector<std::string> scenario_items;  // 场景名列表（最多显示 4 项）
     int selected = 0;                         // 选中场景下标
+    std::string scenario_detail;              // 选中场景的时长+简介（列表下方）
     std::string dialog_title;                 // 对话页标题（场景名）
     std::string countdown;                    // 倒计时文本（如 "09:32"）
     std::string status;                       // 状态文本（连接中/聆听中/角色说话中…）
@@ -50,15 +53,22 @@ public:
     /* 创建覆盖层与刷新定时器（幂等）。 */
     void Init();
 
-    /* 主菜单 */
+    /* 主页面·主菜单态 */
     void ShowMenu(int selected);
     void SetMenuSelected(int selected);
     void HideMenu();
 
-    /* 工牌页 */
+    /* 主页面·工牌录音态 */
     void ShowBadge();
     void HideBadge();
     void SetBadgeProfile(const BadgeProfile& profile);
+
+    /* 配网页（Wi-Fi 配网）：热点名 + 配网地址。AP 未启动时 ssid/url 传空，
+     * 页面显示“正在开启配网热点…”，热点起来后 SetProvisioningInfo 回填。
+     * allow_exit=显示“长按 OK 返回”提示（从设置进入时可退出）。 */
+    void ShowProvisioning(const std::string& ap_ssid, const std::string& ap_url, bool allow_exit);
+    void SetProvisioningInfo(const std::string& ap_ssid, const std::string& ap_url);
+    void HideProvisioning();
 
     /* 头像动图：GIF 覆盖头像位（盖住姓名首字占位）；空数据/解析失败回落首字占位。 */
     void SetAvatarGif(std::vector<uint8_t> gif_data);
