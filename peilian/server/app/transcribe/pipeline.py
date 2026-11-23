@@ -2,7 +2,7 @@
 
 - 触发：record.stop（ws/record.py 异步调 process_session）；"每 60 秒增量触发"留 P1（TODO）
 - VAD 本期 stub：固定 50 帧/段，真实 VAD 后续替换（vad_segments 接口已留）
-- ASR（I7）：POST {MIMO_BASE_URL}/chat/completions，鉴权头 api-key；失败重试 1 次后分段标 failed（§8 降级）
+- ASR（I7）：POST {MIMO_BASE_URL}/chat/completions，鉴权头 api-key，音频送 WAV（format=wav，MiMo 仅收 wav/mp3）；失败重试 1 次后分段标 failed（§8 降级）
 - 空 MIMO_API_KEY 立即降级，不发起联网调用
 - run_quality_check()：质检 skill 扩展点占位，本期不实现
 
@@ -31,7 +31,8 @@ def vad_segments(seqs: list[int]) -> list[list[int]]:
 
 
 async def _call_mimo_asr(audio: bytes) -> str:
-    """调 MiMo ASR：OpenAI 兼容 chat/completions + api-key 头，失败重试 1 次。"""
+    """调 MiMo ASR：OpenAI 兼容 chat/completions + api-key 头，失败重试 1 次。
+    audio 为 WAV 字节（MiMo input_audio.format 仅收 wav/mp3）。"""
     payload = {
         "model": settings.mimo_asr_model,
         "messages": [
@@ -42,7 +43,7 @@ async def _call_mimo_asr(audio: bytes) -> str:
                         "type": "input_audio",
                         "input_audio": {
                             "data": base64.b64encode(audio).decode(),
-                            "format": "opus",
+                            "format": "wav",
                         },
                     }
                 ],
@@ -117,8 +118,13 @@ async def _run(session_id: str) -> None:
             _mark_failed(segment_id)
             continue
 
+        if wav_path is None:
+            # 解码失败无 WAV；MiMo ASR 仅收 wav/mp3，裸 Opus 必 400 → 直接降级
+            _mark_failed(segment_id)
+            continue
+
         try:
-            text = await _call_mimo_asr(merged_path.read_bytes())
+            text = await _call_mimo_asr(wav_path.read_bytes())
         except Exception:  # noqa: BLE001 降级不抛
             _mark_failed(segment_id)
             continue

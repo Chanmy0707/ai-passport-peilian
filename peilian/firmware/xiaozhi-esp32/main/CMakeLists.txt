@@ -51,6 +51,7 @@ if(CONFIG_BOARD_TYPE_FOLOTOY_AI_PASSPORT)
         "mvp/record_client.cc"
         "mvp/flash_ring.c"
         "mvp/emoji_cache.c"
+        "mvp/mvp_default_avatar.c"
         "mvp/mvp_app.cc"
         "mvp/mvp_ui.cc"
     )

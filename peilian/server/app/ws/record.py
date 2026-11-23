@@ -8,7 +8,7 @@
   设备→服务  [二进制音频帧]                                     持续发送，按 seq 幂等去重
   服务→设备  record.ack  {acked_seq}                           每 50 帧或 1 秒确认一次
   设备→服务  badge.get   {device_id}                           拉取工牌配置
-  服务→设备  badge.data  {name, title, employee_no, qr_text, avatar_id}  应答（头像取预置动态 emoji 素材集，缺省按 name 首字静态占位）
+  服务→设备  badge.data  {name, title, employee_no, qr_text, avatar_id}  应答（头像取预置静态 emoji 素材集，缺省默认 😀 grinning_face）
   设备→服务  record.stop {session_id}                          会话结束，触发转写流水线
 
 语义约定：acked_seq 为"已确认的最大连续 seq"（-1 表示未确认），设备断网后从 acked_seq+1 补传（§8）。

@@ -1,0 +1,74 @@
+folotoy/ai-passport 固件包 v2.6.4（固件工牌 MVP 版·正式版）
+生成日期：2026-11-23    芯片：ESP32-C3    Flash：8MB
+v2.6.4 相对 v2.6.3（诊断版）的改动：
+  0a. 静态表情头像改版：emoji 头像由动态 GIF 全部换成静态 PNG 素材库
+      （haoemoji「表情与情感」171 项 + Twemoji CC-BY 4.0），显示更省资源；
+      开机/离线/未配置时默认显示 😀（grinning_face 内置静态图）。
+  0b. 分配判空（修复刷机卡 "initializing..." 根因）：头像链路改为全程
+      heap_caps_malloc 判空分配，堆内存不足时仅告警并保持当前头像、
+      下个轮询周期自动重试，不再崩溃。
+  0c. 崩溃行为恢复 IDF 默认"打印后自动重启"（2.6.3 诊断版的"打印后停机"
+      已取消，正常使用中偶发崩溃可自恢复）。
+  0d. esp_timer 任务栈 8192 保留（2.6.2 循环重启嫌疑修复）。
+  0e. 固件版本号统一为 2.6.4（此前固件内版本与包名不一致）。
+本版更新（含 v2.6.2/2.6.3 全部内容）：
+  1. 首页改版（方案C「大头像居中」）：88px 圆形表情头像居中 + 姓名/
+     岗位·工号居中单行 + 底部暗提示"按 OK 进入菜单"；首页为纯工牌展示。
+  2. 顶栏扩为四项（左→右）：时间(12:40)、日期(12.20)、Wi-Fi 图标（联网绿/
+     未联网灰）、电量图标（最右，8 档电池按电量显示，充电显闪电；时间未
+     同步显示 --:-- / --.--）。
+  3. 新增导航页：首页短按 OK 进入，"主菜单/设置"两行列表（UP/DOWN 选择、
+     OK 进入、长按 OK 返回首页）；主菜单页/设置页改从导航页进入。首页长按
+     OK 仍为小智对话。
+  4. 沿用 v2.6.1 全部内容：离线一次性提醒（不跳配网页）、反复重启修复、
+     头像修复、双网络共存（设备可记忆多个 Wi-Fi 按信号自动连接，
+     属正常漫游；如只想用热点，在 设置→重新配网 里忘掉家庭 Wi-Fi 即可）。
+含分区表（mvp_ring 576KB + mvp_emoji 64KB），升级必须整包烧录（含分区表），
+不能只烧主程序。
+
+一、包内容
+  folotoy-ai-passport-2.6.4-merged.bin  合并镜像（推荐，单文件烧录）
+  flash.sh / flash.bat                  一键烧录脚本（Linux/macOS / Windows）
+  bins/                                 分区单独镜像（需要单独烧某个分区时用）
+
+二、烧录步骤
+  1. 安装依赖：pip install esptool
+  2. USB 连接设备，确认串口：
+     - Windows：设备管理器里看 COM 口
+     - Linux/macOS：ls /dev/ttyACM* 或 /dev/ttyUSB*
+  3. 执行：
+     - Windows：flash.bat COM3        （换成实际 COM 口）
+     - Linux/macOS：./flash.sh        （默认 /dev/ttyACM0，可传参换串口）
+  4. 烧录完成后设备自动重启。
+
+  等效手动命令（不用脚本时）：
+    python -m esptool --chip esp32c3 -b 460800 --before default-reset --after hard-reset \
+      --flash-mode dio --flash-size 8MB --flash-freq 80m -p <串口> \
+      write-flash 0x0 folotoy-ai-passport-2.6.4-merged.bin
+
+  分区单独烧录地址（bins/ 目录）：
+    0x0      bootloader.bin
+    0x8000   partition-table.bin
+    0xd000   ota_data_initial.bin
+    0x20000  xiaozhi.bin            （主程序）
+    0x600000 generated_assets.bin   （字体/图片资源，必须烧，否则 UI 无中文字体）
+
+三、本版真机验证要点（刷机后核实）
+  1. 开机应正常进入主页面（不再卡 "initializing..."）；首页默认显示 😀
+     静态表情头像，云端工牌配置到位后约 15 秒自动替换为配置头像。
+  2. 首页：顶栏四项（时间/日期/Wi-Fi/电量图标），88px 大头像居中，
+     姓名/岗位·工号居中，底部"按 OK 进入菜单"。
+  3. 导航页：首页短按 OK → "主菜单/设置"两行；UP/DOWN 切换、OK 进入、
+     长按 OK 返回首页；主菜单/设置功能可用。
+  4. 离线回归：断网触发录音/陪练/小智对话 → 只弹一次"未联网，可在设置
+     重新配网"；设置→"重新配网"进配网页，长按 OK 取消回设置。
+  5. 稳定性回归：连手机热点使用 10 分钟，不应反复断线重连/回开机 logo。
+
+四、联网与绑定（工牌模式）
+  - 设备开机后按板载流程配网（设备热点/BLUFI）。
+  - device_id 自动取 WiFi MAC（十六进制），无需手工配置。
+  - 服务端地址与设备令牌默认取编译期配置（record_ws_url / badge_api_url / device_token），
+    如需修改，通过 NVS settings 命名空间 mvp 下同名键覆盖。
+  - 工牌绑定：设备联网后在管理后台对该 device_id 配置工牌资料即可（PUT /api/v1/devices/{id}/badge）。
+  - 注意：emoji 素材库已整体替换为静态 PNG，管理端早前配置的旧头像 id 可能
+    不在新库中，需在管理端重选一次头像。

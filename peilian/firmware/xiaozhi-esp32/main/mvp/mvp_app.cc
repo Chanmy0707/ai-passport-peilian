@@ -29,11 +29,15 @@
 #define TAG "mvp_app"
 
 namespace {
-/* 主菜单项：0=工牌 1=智能陪练 2=对话 3=设置。 */
-constexpr int kMenuItemBadge = 0;
+/* 导航页两项：0=主菜单 1=设置。 */
+constexpr int kNavItemMenu = 0;
+constexpr int kNavItemSettings = 1;
+
+/* 主菜单页项：0=录音 1=智能陪练 2=小智对话 3=返回。 */
+constexpr int kMenuItemRecord = 0;
 constexpr int kMenuItemPractice = 1;
 constexpr int kMenuItemChat = 2;
-constexpr int kMenuItemSettings = 3;
+constexpr int kMenuItemBack = 3;
 bool MenuItemEnabled(int index) { return index >= 0 && index <= 3; }
 
 /* 设置子页项：0=设备信息 1=音量调节 2=Wi-Fi 重新配网 3=恢复出厂设置。 */
@@ -76,33 +80,39 @@ void MvpApp::Init() {
         Application::GetInstance().Schedule([this, profile]() { OnBadgeProfile(profile); });
     });
 
-    // 头像动图按需下载/缓存命中后回调（badge 任务内已 Schedule 到主线程）→ 覆盖首字占位
+    // 头像静态图按需下载/缓存命中后回调（badge 任务内）→ 调度到主线程覆盖默认 😀 头像
     RecordClient::GetInstance().SetAvatarCallback(
-        [this](const std::string& emoji_id, std::vector<uint8_t> gif) {
-            OnAvatarGif(emoji_id, std::move(gif));
+        [this](const std::string& emoji_id, uint8_t* png, size_t len) {
+            Application::GetInstance().Schedule([this, emoji_id, png, len]() {
+                OnAvatarImage(emoji_id, png, len);
+            });
         });
 
-    // 开机未配网：先显示配网页，配网成功后再进主页面
+    // 开机立即拉取工牌配置/头像（原首次拉取在 15s 定时器，短周期/重启场景拿不到头像）
+    RecordClient::GetInstance().FetchBadgeProfileAsync();
+
+    // 开机未配网：离线进首页显示工牌，仅一次性提醒；配网入口收敛到 设置→重新配网
     if (SsidManager::GetInstance().GetSsidList().empty()) {
-        EnterProvisioning(false);
+        GoToHome();
+        NotifyOfflineOnce();
         return;
     }
 
-    // 按上次模式进入：上次为对话则直进对话，否则开主菜单
+    // 按上次模式进入：上次为对话则直进对话，否则进首页
     Settings settings("mvp", true);
     if (settings.GetString("last_mode", "") == "chat") {
         ModeManager_Switch(MODE_CHAT);
-        menu_open_ = false;
+        home_open_ = false;
     } else {
-        OpenMenu();
+        GoToHome();
     }
 }
 
 bool MvpApp::HandleKey(int key, bool long_press) {
     if (provisioning_) {
-        // 配网页：仅设置进入时长按 OK 取消（回退原网络并返回设置）
+        // 配网页：长按 OK 取消（kSettings 回退原网络并返回设置；kBoot/kFeature 回主页面）
         if (key == 2) {
-            if (long_press && provisioning_from_settings_) {
+            if (long_press) {
                 CancelProvisioning();
             }
             return true;
@@ -110,10 +120,11 @@ bool MvpApp::HandleKey(int key, bool long_press) {
         return false;  // UP/DOWN 走默认音量
     }
 
+    // 主菜单页：UP/DOWN 选择、OK 进入（长按=小智对话）
     if (menu_open_) {
         if (key == 2) {  // OK
             if (long_press) {
-                CloseMenuToChat();
+                GoToChat();
             } else {
                 EnterSelected();
             }
@@ -126,11 +137,48 @@ bool MvpApp::HandleKey(int key, bool long_press) {
         return false;  // UP/DOWN 长按走默认音量
     }
 
+    // 导航页：主菜单 / 设置 两项，UP/DOWN 选择、OK 进入（长按=返回首页）
+    if (nav_open_) {
+        if (key == 2) {  // OK
+            if (long_press) {
+                GoToHome();
+            } else if (nav_selected_ == kNavItemMenu) {
+                OpenMenu();
+            } else {
+                ModeManager_Switch(MODE_SETTINGS);
+                nav_open_ = false;
+                home_open_ = false;
+                EnterSettings();
+            }
+            return true;
+        }
+        if (!long_press && (key == 0 || key == 1)) {  // UP/DOWN 两项切换
+            nav_selected_ = (nav_selected_ == kNavItemMenu) ? kNavItemSettings : kNavItemMenu;
+            MvpUi::GetInstance().SetNavSelected(nav_selected_);
+            return true;
+        }
+        return false;  // UP/DOWN 长按走默认音量
+    }
+
+    // 主页面·首页态：纯工牌展示，OK 进导航页（长按=小智对话）
+    if (home_open_) {
+        if (key == 2) {  // OK
+            if (long_press) {
+                GoToChat();
+            } else {
+                OpenNav();
+            }
+            return true;
+        }
+        return false;  // UP/DOWN 走默认音量
+    }
+
+    // 工牌录音态：OK 录音/停止（长按回首页）
     if (ModeManager_GetMode() == MODE_BADGE) {
         if (key == 2) {  // OK
             if (long_press) {
                 StopCapture();
-                OpenMenu();
+                GoToHome();
             } else {
                 ToggleCapture();
             }
@@ -222,9 +270,14 @@ bool MvpApp::HandleKey(int key, bool long_press) {
         return false;
     }
 
-    // 对话模式：仅 OK 长按开菜单，其余走默认聊天行为
+    // 对话模式：仅 OK 长按回首页，其余走默认聊天行为
     if (key == 2 && long_press) {
-        OpenMenu();
+        GoToHome();
+        return true;
+    }
+    // 离线时 OK 短按不走默认聊天开关（默认的“连接中”提示在 mvp 界面下不可见），改为一次性提醒
+    if (key == 2 && !long_press && !WifiManager::GetInstance().IsConnected()) {
+        NotifyOfflineOnce();
         return true;
     }
     return false;
@@ -248,6 +301,9 @@ void MvpApp::ToggleCapture() {
 }
 
 void MvpApp::StartCapture() {
+    if (!RequireNetwork()) {
+        return;  // 未联网一次性提醒，不离线录音
+    }
     if (capturing_.load()) {
         return;
     }
@@ -287,54 +343,71 @@ void MvpApp::StopCapture() {
     MvpUi::GetInstance().Update();
 }
 
-/* ---------------- 菜单/模式编排 ---------------- */
+/* ---------------- 首页/导航页/菜单/模式编排 ---------------- */
 
-void MvpApp::OpenMenu() {
-    StopCapture();  // 菜单态不录音
-    menu_open_ = true;
-    menu_selected_ = (ModeManager_GetMode() == MODE_CHAT) ? kMenuItemChat : kMenuItemBadge;
-    MvpUi::GetInstance().ShowMenu(menu_selected_);
+void MvpApp::GoToHome() {
+    StopCapture();  // 首页态不录音
+    ModeManager_Switch(MODE_BADGE);
+    home_open_ = true;
+    nav_open_ = false;
+    menu_open_ = false;
+    MvpUi::GetInstance().ShowHome();
 }
 
-void MvpApp::CloseMenuToChat() {
+void MvpApp::OpenNav() {
+    StopCapture();  // 导航页不录音
+    home_open_ = false;
+    nav_open_ = true;
+    menu_open_ = false;
+    MvpUi::GetInstance().ShowNav(nav_selected_);
+}
+
+void MvpApp::GoToChat() {
+    if (!RequireNetwork()) {
+        return;  // 未联网一次性提醒，不离线对话
+    }
     StopCapture();
     ModeManager_Switch(MODE_CHAT);
+    home_open_ = false;
+    nav_open_ = false;
     menu_open_ = false;
     Settings settings("mvp", true);
     settings.SetString("last_mode", "chat");
-    MvpUi::GetInstance().HideMenu();
-    MvpUi::GetInstance().HideBadge();
+    MvpUi::GetInstance().ShowChat();
+}
+
+void MvpApp::OpenMenu() {
+    StopCapture();  // 菜单态不录音
+    nav_open_ = false;
+    menu_open_ = true;
+    menu_selected_ = kMenuItemRecord;
+    MvpUi::GetInstance().ShowMenu(menu_selected_);
 }
 
 void MvpApp::EnterSelected() {
-    if (menu_selected_ == kMenuItemBadge) {
+    if (menu_selected_ == kMenuItemRecord) {
         ModeManager_Switch(MODE_BADGE);
         menu_open_ = false;
+        home_open_ = false;
+        nav_open_ = false;
         Settings settings("mvp", true);
         settings.SetString("last_mode", "badge");
-        MvpUi::GetInstance().HideMenu();
         MvpUi::GetInstance().ShowBadge();
         OnBadgeProfile(RecordClient::GetInstance().GetBadgeProfile());  // 先显示缓存/未绑定态
         RecordClient::GetInstance().FetchBadgeProfileAsync();  // 刷新工牌配置
-    } else if (menu_selected_ == kMenuItemChat) {
-        ModeManager_Switch(MODE_CHAT);
-        menu_open_ = false;
-        Settings settings("mvp", true);
-        settings.SetString("last_mode", "chat");
-        MvpUi::GetInstance().HideMenu();
-        MvpUi::GetInstance().HideBadge();
     } else if (menu_selected_ == kMenuItemPractice) {
+        if (!RequireNetwork()) {
+            return;  // 未联网一次性提醒
+        }
         ModeManager_Switch(MODE_PRACTICE);
         menu_open_ = false;
-        MvpUi::GetInstance().HideMenu();
-        MvpUi::GetInstance().HideBadge();
+        home_open_ = false;
+        nav_open_ = false;
         EnterPractice();
-    } else if (menu_selected_ == kMenuItemSettings) {
-        ModeManager_Switch(MODE_SETTINGS);
-        menu_open_ = false;
-        MvpUi::GetInstance().HideMenu();
-        MvpUi::GetInstance().HideBadge();
-        EnterSettings();
+    } else if (menu_selected_ == kMenuItemChat) {
+        GoToChat();
+    } else if (menu_selected_ == kMenuItemBack) {
+        GoToHome();
     }
 }
 
@@ -370,8 +443,7 @@ void MvpApp::EnterSettings() {
 void MvpApp::LeaveSettings() {
     settings_info_lines_.clear();
     MvpUi::GetInstance().HideSettings();
-    ModeManager_Switch(MODE_CHAT);
-    OpenMenu();
+    GoToHome();
 }
 
 void MvpApp::RenderSettings() {
@@ -414,7 +486,7 @@ void MvpApp::EnterSettingsItem() {
             break;
         case kSettingsItemWifi:
             // 重新配网：跳转配网页 + 板级进 AP 配网模式
-            EnterProvisioning(true);
+            EnterProvisioning(ProvOrigin::kSettings);
             return;  // 配网页接管界面，勿再 RenderSettings
         case kSettingsItemReset:
             settings_page_ = SettingsPage::kConfirmReset;
@@ -461,16 +533,37 @@ void MvpApp::DoFactoryReset() {
     esp_restart();
 }
 
-/* ================= 配网页（开机未配网 / 设置里“Wi-Fi 重新配网”） ================= */
+/* ============= 配网页（开机未配网 / 设置里“Wi-Fi 重新配网” / 联网功能触发） ============= */
 
-void MvpApp::EnterProvisioning(bool from_settings) {
+void MvpApp::EnterProvisioning(ProvOrigin origin) {
+    if (provisioning_) {
+        return;
+    }
     provisioning_ = true;
-    provisioning_from_settings_ = from_settings;
-    if (from_settings) {
+    provisioning_origin_ = origin;
+    auto& wifi = WifiManager::GetInstance();
+    // 配网热点已在运行（如开机未配网由板级流程开启）则直接复用，勿重复开启
+    if (!wifi.IsConfigMode()) {
         static_cast<WifiBoard&>(Board::GetInstance()).EnterWifiConfigMode();
     }
-    auto& wifi = WifiManager::GetInstance();
-    MvpUi::GetInstance().ShowProvisioning(wifi.GetApSsid(), wifi.GetApWebUrl(), from_settings);
+    MvpUi::GetInstance().ShowProvisioning(wifi.GetApSsid(), wifi.GetApWebUrl(), origin);
+}
+
+bool MvpApp::RequireNetwork() {
+    if (WifiManager::GetInstance().IsConnected()) {
+        return true;
+    }
+    // 离线：仅一次性提醒，不跳配网页、不动网络（配网入口在 设置→重新配网）
+    NotifyOfflineOnce();
+    return false;
+}
+
+void MvpApp::NotifyOfflineOnce() {
+    if (offline_notice_shown_) {
+        return;
+    }
+    offline_notice_shown_ = true;
+    MvpUi::GetInstance().ShowOfflineNotice();
 }
 
 void MvpApp::ExitProvisioning(bool to_settings) {
@@ -483,7 +576,7 @@ void MvpApp::ExitProvisioning(bool to_settings) {
         settings_page_ = SettingsPage::kMenu;
         RenderSettings();
     } else {
-        OpenMenu();
+        GoToHome();
     }
 }
 
@@ -493,24 +586,25 @@ void MvpApp::CancelProvisioning() {
     if (!SsidManager::GetInstance().GetSsidList().empty()) {
         wifi.StartStation();
     }
-    ExitProvisioning(true);
+    // kSettings 取消回设置菜单（已回退原网络）；kBoot/kFeature 取消回主页面离线显示工牌
+    ExitProvisioning(provisioning_origin_ == ProvOrigin::kSettings);
 }
 
 void MvpApp::OnNetworkEvent(NetworkEvent event) {
     Application::GetInstance().Schedule([this, event]() {
         if (event == NetworkEvent::WifiConfigModeEnter) {
-            // 配网热点就绪：回填热点名/配网地址（可能由板级流程自行开启）
-            if (!provisioning_) {
-                provisioning_from_settings_ = false;
-                provisioning_ = true;
+            // 配网热点就绪：仅在配网页已打开时回填热点名/配网地址，不自动弹页
+            if (provisioning_) {
+                auto& wifi = WifiManager::GetInstance();
+                MvpUi::GetInstance().SetProvisioningInfo(wifi.GetApSsid(), wifi.GetApWebUrl());
             }
-            auto& wifi = WifiManager::GetInstance();
-            MvpUi::GetInstance().ShowProvisioning(wifi.GetApSsid(), wifi.GetApWebUrl(),
-                                                 provisioning_from_settings_);
         } else if (event == NetworkEvent::Connected) {
+            // 新的联网周期：重新允许一次性离线提醒
+            offline_notice_shown_ = false;
             // 配网成功：从设置进入的回设置菜单，否则进主页面
             if (provisioning_) {
-                ExitProvisioning(provisioning_from_settings_ && ModeManager_GetMode() == MODE_SETTINGS);
+                ExitProvisioning(provisioning_origin_ == ProvOrigin::kSettings &&
+                                 ModeManager_GetMode() == MODE_SETTINGS);
             }
         }
     });
@@ -518,16 +612,16 @@ void MvpApp::OnNetworkEvent(NetworkEvent event) {
 
 void MvpApp::OnBadgeProfile(const BadgeProfile& profile) {
     MvpUi::GetInstance().SetBadgeProfile(profile);
-    /* 头像变更（含取消头像）：先回落首字占位，新头像随后由 OnAvatarGif 盖上；获取失败保持占位。 */
+    /* 头像变更（含取消头像）：先回落默认 😀 头像，新头像随后由 OnAvatarImage 盖上；获取失败保持默认。 */
     if (profile.avatar_id != badge_avatar_id_) {
         badge_avatar_id_.clear();
-        MvpUi::GetInstance().ClearAvatarGif();
+        MvpUi::GetInstance().ClearAvatarImage();
     }
 }
 
-void MvpApp::OnAvatarGif(const std::string& emoji_id, std::vector<uint8_t> gif) {
+void MvpApp::OnAvatarImage(const std::string& emoji_id, uint8_t* data, size_t len) {
     badge_avatar_id_ = emoji_id;
-    MvpUi::GetInstance().SetAvatarGif(std::move(gif));
+    MvpUi::GetInstance().SetAvatarImage(data, len); /* 所有权移交 UI */
 }
 
 /* ================= 智能陪练（《智能陪练详细设计.md》） ================= */
@@ -553,8 +647,7 @@ void MvpApp::LeavePractice() {
     set_scenario_sent_ = false;
     pending_set_scenario_id_ = -1;
     MvpUi::GetInstance().HidePractice();
-    ModeManager_Switch(MODE_CHAT);
-    OpenMenu();
+    GoToHome();
 }
 
 void MvpApp::FetchScenarios() {

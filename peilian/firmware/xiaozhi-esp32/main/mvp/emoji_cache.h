@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 #define EMOJI_CACHE_ID_MAX 32   /* emoji_id 存储上限（含 NUL） */
-#define EMOJI_CACHE_DATA_MAX 60000  /* 载荷上限（分区 64KB - 头 - 裕量） */
+#define EMOJI_CACHE_DATA_MAX 16384  /* 载荷上限（静态 PNG 64px 仅数 KB，16KB 足够且降低大块分配 OOM 风险） */
 
 /* 挂载分区。分区缺失/初始化失败返回 false（缓存禁用，仅在线下载）。 */
 bool EmojiCache_Init(void);

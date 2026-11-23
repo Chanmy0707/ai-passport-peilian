@@ -169,8 +169,11 @@ void WifiBoard::OnWifiConnectTimeout(void* arg) {
 
 void WifiBoard::StartWifiConfigMode() {
     in_config_mode_ = true;
-    // Transition to wifi configuring state
-    Application::GetInstance().SetDeviceState(kDeviceStateWifiConfiguring);
+    // Transition to wifi configuring state. This can be called from esp_timer
+    // or a worker task, so schedule the state change onto the main loop.
+    Application::GetInstance().Schedule([]() {
+        Application::GetInstance().SetDeviceState(kDeviceStateWifiConfiguring);
+    });
 #ifdef CONFIG_USE_HOTSPOT_WIFI_PROVISIONING
     auto& wifi_manager = WifiManager::GetInstance();
 

@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include <cJSON.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_timer.h>
 
@@ -20,7 +21,7 @@
 static constexpr size_t kFrameQueueDepth = 8;
 static constexpr int kReconnectIntervalSec = 5;
 static constexpr int kHelloTimeoutMs = 10000;
-static constexpr uint64_t kBadgeRetryIntervalUs = 15 * 1000000ULL; /* 未绑定时 15s 重试 */
+static constexpr uint64_t kBadgeRetryIntervalUs = 15 * 1000000ULL; /* 15s 轮询比对 updated_at */
 
 RecordClient& RecordClient::GetInstance() {
     static RecordClient instance;
@@ -58,11 +59,9 @@ void RecordClient::BadgeRetryTimerCallback(void* arg) {
 }
 
 void RecordClient::OnBadgeRetryTick() {
-    /* 仅未绑定时重拉（esp_timer 任务上下文，FetchBadgeProfileAsync 只起任务不阻塞）：
-     * 网络晚配置/云端后绑定/拉取失败均在下个 tick 自动重试，成功后回调刷新界面。 */
-    if (!GetBadgeProfile().valid) {
-        FetchBadgeProfileAsync();
-    }
+    /* 每 15s 轮询（esp_timer 任务上下文，FetchBadgeProfileAsync 只起任务不阻塞）：
+     * 未绑定时重试拉取；已绑定时由 BadgeTaskEntry 比对 updated_at，云端修改自动同步。 */
+    FetchBadgeProfileAsync();
 }
 
 void RecordClient::StartRecording() {
@@ -368,6 +367,18 @@ void RecordClient::EndSession() {
 
 /* ---------------- 工牌配置（HTTP） ---------------- */
 
+BadgeProfile PresetBadgeProfile() {
+    /* 出厂预制信息：默认 😀（grinning_face）静态 PNG 头像、Jack/销售顾问/No.1024。 */
+    BadgeProfile preset;
+    preset.name = "Jack";
+    preset.title = "销售顾问";
+    preset.employee_no = "No.1024";
+    preset.avatar_id = "grinning_face";
+    preset.avatar_url = "/emojis/64px/grinning_face.png";
+    preset.valid = true;
+    return preset;
+}
+
 static bool ParseBadgeJson(const std::string& body, BadgeProfile* out) {
     cJSON* root = cJSON_Parse(body.c_str());
     if (root == nullptr) {
@@ -383,6 +394,7 @@ static bool ParseBadgeJson(const std::string& body, BadgeProfile* out) {
     out->qr_text = get("qr_text");
     out->avatar_id = get("avatar_id");
     out->avatar_url = get("avatar_url");
+    out->updated_at = get("updated_at");
     out->valid = true;
     cJSON_Delete(root);
     return true;
@@ -441,18 +453,49 @@ void RecordClient::BadgeTaskEntry(void* arg) {
             ParseBadgeJson(cached, &profile);
         }
     }
-    if (profile.valid) {
-        std::function<void(const BadgeProfile&)> callback;
-        {
-            std::lock_guard<std::mutex> lock(self->badge_mutex_);
-            self->badge_ = profile;
+    BadgeProfile shown;
+    BadgeProfile deliver;
+    bool notify = false;
+    bool deliver_avatar = false;
+    std::function<void(const BadgeProfile&)> callback;
+    {
+        std::lock_guard<std::mutex> lock(self->badge_mutex_);
+        if (profile.valid) {
+            /* 真实配置入档（预制不入档）；updated_at 未变则跳过回调，避免每 tick 重绘 UI；
+             * 云端绑定或修改（updated_at 变化）时才刷新。 */
+            if (!self->badge_.valid || self->badge_.updated_at != profile.updated_at) {
+                self->badge_ = profile;
+                self->shown_profile_ = profile;
+                shown = profile;
+                notify = true;
+            }
+            self->badge_preset_shown_ = false;
+        } else if (self->badge_.valid) {
+            /* 拉取失败（404/断网）但已有绑定配置：保持当前显示，不回落预制抖动 */
+        } else if (!self->badge_preset_shown_) {
+            /* 未绑定且无缓存：回调一次预制信息（UI 端同款兜底），不重复通知 */
+            shown = PresetBadgeProfile();
+            self->shown_profile_ = shown;
+            notify = true;
+            self->badge_preset_shown_ = true;
+        }
+        /* 头像：按 avatar_id 去重投递（文本变更不动头像，避免头像重复重载）；
+         * 未成功投递（断网/下载失败）则每 tick 重试直至缓存命中或下载成功。 */
+        if (self->shown_profile_.valid &&
+            self->shown_profile_.avatar_id != self->avatar_delivered_id_) {
+            deliver = self->shown_profile_;
+            deliver_avatar = true;
+        }
+        if (notify) {
             callback = self->badge_callback_;
         }
-        if (callback) {
-            BadgeProfile copy = profile;
-            Application::GetInstance().Schedule([callback, copy]() { callback(copy); });
-        }
-        self->DeliverAvatar(profile);
+    }
+    if (notify && callback) {
+        BadgeProfile copy = shown;
+        Application::GetInstance().Schedule([callback, copy]() { callback(copy); });
+    }
+    if (deliver_avatar) {
+        self->DeliverAvatar(deliver);
     }
     self->badge_fetch_running_ = false;
     vTaskDelete(nullptr);
@@ -480,53 +523,66 @@ void RecordClient::SetBadgeProfileCallback(std::function<void(const BadgeProfile
 }
 
 void RecordClient::SetAvatarCallback(
-    std::function<void(const std::string&, std::vector<uint8_t>)> callback) {
+    std::function<void(const std::string&, uint8_t* data, size_t len)> callback) {
     std::lock_guard<std::mutex> lock(badge_mutex_);
     avatar_callback_ = std::move(callback);
 }
 
-void RecordClient::DeliverAvatar(const BadgeProfile& profile) {
+bool RecordClient::DeliverAvatar(const BadgeProfile& profile) {
     if (profile.avatar_id.empty() || profile.avatar_url.empty()) {
-        return;
+        std::lock_guard<std::mutex> lock(badge_mutex_);
+        avatar_delivered_id_.clear(); /* 无头像：UI 保持默认 😀 头像 */
+        return true;
     }
-    std::function<void(const std::string&, std::vector<uint8_t>)> callback;
+    std::function<void(const std::string&, uint8_t*, size_t)> callback;
     {
         std::lock_guard<std::mutex> lock(badge_mutex_);
         callback = avatar_callback_;
     }
     if (!callback) {
-        return;
+        return false;
     }
     EmojiCache_Init();
-    std::vector<uint8_t> gif(EMOJI_CACHE_DATA_MAX);
+    /* [判空] 固件关 C++ 异常，operator new 失败会直接 abort（v2.6.3 停在 initializing 的根因）：
+     * 头像缓冲改 heap_caps_malloc 判空，分配失败仅告警并保持当前头像，下个轮询 tick 重试。 */
+    uint8_t* buf = static_cast<uint8_t*>(heap_caps_malloc(EMOJI_CACHE_DATA_MAX, MALLOC_CAP_8BIT));
+    if (buf == nullptr) {
+        ESP_LOGW(TAG, "头像缓冲分配失败 %uB，保持当前头像，下个 tick 重试",
+                 (unsigned)EMOJI_CACHE_DATA_MAX);
+        return false;
+    }
     size_t len = 0;
-    if (EmojiCache_Load(profile.avatar_id.c_str(), gif.data(), gif.size(), &len)) {
-        gif.resize(len);
+    if (EmojiCache_Load(profile.avatar_id.c_str(), buf, EMOJI_CACHE_DATA_MAX, &len)) {
         ESP_LOGI(TAG, "头像缓存命中 id=%s len=%u", profile.avatar_id.c_str(), (unsigned)len);
     } else {
-        if (!DownloadAvatar(profile.avatar_url, &gif)) {
-            ESP_LOGW(TAG, "头像获取失败 url=%s，回落姓名首字", profile.avatar_url.c_str());
-            return;
+        if (!DownloadAvatar(profile.avatar_url, buf, EMOJI_CACHE_DATA_MAX, &len)) {
+            ESP_LOGW(TAG, "头像获取失败 url=%s，保持当前头像", profile.avatar_url.c_str());
+            heap_caps_free(buf);
+            return false; /* 下个轮询 tick 重试 */
         }
-        ESP_LOGI(TAG, "头像下载完成 id=%s len=%u", profile.avatar_id.c_str(),
-                 (unsigned)gif.size());
-        EmojiCache_Save(profile.avatar_id.c_str(), gif.data(), gif.size());
+        ESP_LOGI(TAG, "头像下载完成 id=%s len=%u", profile.avatar_id.c_str(), (unsigned)len);
+        EmojiCache_Save(profile.avatar_id.c_str(), buf, len);
     }
-    Application::GetInstance().Schedule([callback, id = profile.avatar_id,
-                                         gif = std::move(gif)]() mutable {
-        callback(id, std::move(gif));
+    {
+        std::lock_guard<std::mutex> lock(badge_mutex_);
+        avatar_delivered_id_ = profile.avatar_id;
+    }
+    Application::GetInstance().Schedule([callback, id = profile.avatar_id, buf, len]() {
+        callback(id, buf, len); /* buf 所有权移交 UI（用后 heap_caps_free） */
     });
+    return true;
 }
 
-bool RecordClient::DownloadAvatar(const std::string& url, std::vector<uint8_t>* out) {
+bool RecordClient::DownloadAvatar(const std::string& url, uint8_t* buf, size_t cap,
+                                  size_t* out_len) {
     const auto& cfg = GetMvpConfig();
     auto network = Board::GetInstance().GetNetwork();
-    if (network == nullptr || out == nullptr) {
+    if (network == nullptr || buf == nullptr || out_len == nullptr) {
         return false;
     }
     std::string full = url;
     if (full.rfind("http", 0) != 0) {
-        /* 相对路径（如 /emojis/64px/<id>.gif）拼到 badge_api_url 的 scheme://host:port */
+        /* 相对路径（如 /emojis/64px/<id>.png）拼到 badge_api_url 的 scheme://host:port */
         size_t scheme = cfg.badge_api_url.find("://");
         if (scheme == std::string::npos) {
             return false;
@@ -554,13 +610,12 @@ bool RecordClient::DownloadAvatar(const std::string& url, std::vector<uint8_t>* 
         return false;
     }
     size_t content_length = http->GetBodyLength();
-    if (content_length == 0 || content_length > EMOJI_CACHE_DATA_MAX) {
+    if (content_length == 0 || content_length > cap) {
         ESP_LOGW(TAG, "头像长度非法 %u", (unsigned)content_length);
         http->Close();
         return false;
     }
-    out->clear();
-    out->reserve(content_length);
+    size_t len = 0;
     static char chunk[1024]; /* 仅 BadgeTaskEntry 单线程调用，放 BSS 避免超大栈帧 */
     while (true) {
         auto ret = http->Read(chunk, sizeof(chunk));
@@ -572,13 +627,18 @@ bool RecordClient::DownloadAvatar(const std::string& url, std::vector<uint8_t>* 
         if (n == 0) {
             break;
         }
-        if (out->size() + n > EMOJI_CACHE_DATA_MAX) {
+        if (len + n > cap) {
             ESP_LOGW(TAG, "头像超长，拒收");
             http->Close();
             return false;
         }
-        out->insert(out->end(), chunk, chunk + n);
+        std::memcpy(buf + len, chunk, n);
+        len += n;
     }
     http->Close();
-    return !out->empty();
+    if (len == 0) {
+        return false;
+    }
+    *out_len = len;
+    return true;
 }

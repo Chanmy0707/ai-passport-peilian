@@ -370,8 +370,12 @@ void Application::HandleNetworkDisconnectedEvent() {
     }
     if (state == kDeviceStateConnecting || state == kDeviceStateListening ||
         state == kDeviceStateSpeaking) {
-        ESP_LOGI(TAG, "Closing audio channel due to network disconnection");
-        protocol_->CloseAudioChannel();
+        // protocol_ is only created after first successful connection; Wi-Fi
+        // flapping can disconnect before that, so guard against null here.
+        if (protocol_ != nullptr) {
+            ESP_LOGI(TAG, "Closing audio channel due to network disconnection");
+            protocol_->CloseAudioChannel();
+        }
     }
 
     // Update the status bar immediately to show the network state

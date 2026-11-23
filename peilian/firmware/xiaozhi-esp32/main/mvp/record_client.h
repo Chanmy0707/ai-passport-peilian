@@ -42,9 +42,13 @@ struct BadgeProfile {
     std::string employee_no;
     std::string qr_text;
     std::string avatar_id;
-    std::string avatar_url;  /* 相对路径（如 /emojis/64px/<id>.gif），头像 GIF 按需下载 */
+    std::string avatar_url;  /* 相对路径（如 /emojis/64px/<id>.png），头像静态图按需下载 */
+    std::string updated_at;  /* 云端最后更新时间（ISO8601），15s 轮询比对是否变更 */
     bool valid = false;
 };
+
+/* 出厂预制工牌信息（未绑定/未拉到云端配置时的默认显示）：默认 😀（grinning_face）、Jack/销售顾问/No.1024。 */
+BadgeProfile PresetBadgeProfile();
 
 class RecordClient {
 public:
@@ -66,14 +70,16 @@ public:
 
     /* 工牌配置：HTTP GET /devices/{id}/badge（X-Device-Token），一次性任务执行，完成后回调。 */
     void FetchBadgeProfileAsync();
-    /* 未绑定（badge 无效）时每 kBadgeRetrySec 秒自动重拉：覆盖网络晚配、云端后绑定，无需重启设备。 */
+    /* 每 kBadgeRetrySec 秒轮询云端工牌配置并比对 updated_at：首次绑定与云端修改均自动
+     * 同步刷新（无需重启设备、无需手动下发），网络恢复时立即重拉。 */
     void StartBadgeRetry();
     BadgeProfile GetBadgeProfile() const;
     void SetBadgeProfileCallback(std::function<void(const BadgeProfile&)> callback);
 
-    /* 头像动图：badge 任务内按需下载 avatar_url（先查 mvp_emoji 缓存），完成后经 Schedule 回调
-     * (emoji_id, GIF 字节)；失败不回调（UI 保持姓名首字占位）。 */
-    void SetAvatarCallback(std::function<void(const std::string&, std::vector<uint8_t>)> callback);
+    /* 头像静态图：badge 任务内按需下载 avatar_url（先查 mvp_emoji 缓存），完成后经 Schedule 回调
+     * (emoji_id, PNG 字节, 长度)；data 为 heap_caps_malloc 块，所有权移交回调方（用后 heap_caps_free）；
+     * 失败不回调（UI 保持默认 😀 头像）。 */
+    void SetAvatarCallback(std::function<void(const std::string&, uint8_t* data, size_t len)> callback);
 
 private:
     RecordClient() = default;
@@ -90,8 +96,11 @@ private:
     static void BadgeRetryTimerCallback(void* arg);
     void OnBadgeRetryTick();
     bool FetchBadgeProfile(BadgeProfile* out);
-    void DeliverAvatar(const BadgeProfile& profile);
-    bool DownloadAvatar(const std::string& url, std::vector<uint8_t>* out);
+    /* 头像静态图：badge 任务内按需下载 avatar_url（先查 mvp_emoji 缓存），完成后经 Schedule 回调
+     * (emoji_id, PNG 字节, 长度)；成功返回 true 并记录 avatar_delivered_id_，失败返回 false（下 tick 重试）。 */
+    bool DeliverAvatar(const BadgeProfile& profile);
+    /* 把 avatar_url 内容下载进 buf（cap 容量）并回写 out_len；memcpy 直填，不做任何 vector 分配。 */
+    bool DownloadAvatar(const std::string& url, uint8_t* buf, size_t cap, size_t* out_len);
 
     struct RecordFrame {
         uint32_t seq;
@@ -123,6 +132,9 @@ private:
     esp_timer_handle_t badge_retry_timer_ = nullptr;
     mutable std::mutex badge_mutex_;
     BadgeProfile badge_;
+    BadgeProfile shown_profile_;        /* 当前展示的工牌（含预制兜底），badge_mutex_ 保护 */
+    std::string avatar_delivered_id_;   /* 已投递头像的 avatar_id（去重，防头像重复重载） */
+    bool badge_preset_shown_ = false;   /* 未绑定已回调过预制信息（badge_mutex_ 保护），防每 tick 重绘 */
     std::function<void(const BadgeProfile&)> badge_callback_;
-    std::function<void(const std::string&, std::vector<uint8_t>)> avatar_callback_;
+    std::function<void(const std::string&, uint8_t*, size_t)> avatar_callback_; /* data 所有权移交 UI */
 };

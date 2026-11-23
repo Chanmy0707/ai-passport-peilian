@@ -16,6 +16,7 @@
 
 #include <esp_timer.h>
 
+#include "mvp_ui.h"  // ProvOrigin
 #include "record_client.h"  // BadgeProfile
 
 /* board.h 的网络事件（前向声明，避免头文件依赖） */
@@ -25,7 +26,7 @@ class MvpApp {
 public:
     static MvpApp& GetInstance();
 
-    /* 初始化：模式状态机、RecordClient、工牌配置回调、按上次模式进入对话或主菜单。 */
+    /* 初始化：模式状态机、RecordClient、工牌配置回调、按上次模式进入对话或首页。 */
     void Init();
 
     /* 三键事件入口（主任务调用）。
@@ -48,7 +49,7 @@ public:
     void OnServerMessage(const std::string& message_json);
 
     /* 网络事件（application.cc 网络回调转发，非主线程；内部 Schedule 回主线程）：
-     * WifiConfigModeEnter→显示/回填配网页；Connected→配网页消失进主页面。 */
+     * WifiConfigModeEnter→配网页已打开时回填热点信息；Connected→复位离线提醒、配网页消失进主页面。 */
     void OnNetworkEvent(NetworkEvent event);
 
 private:
@@ -60,30 +61,37 @@ private:
     void StopCapture();
     void ToggleCapture();
 
-    /* 菜单/模式编排 */
-    void OpenMenu();
-    void CloseMenuToChat();
-    void EnterSelected();
+    /* 首页/导航页/菜单/模式编排 */
+    void GoToHome();          // 回首页（纯工牌展示 + 暗提示）
+    void GoToChat();          // 回小智对话（隐藏主页面覆盖层）
+    void OpenNav();           // 首页按 OK → 导航页（主菜单 / 设置）
+    void OpenMenu();          // 导航页选主菜单 → 主菜单页
+    void EnterSelected();     // 主菜单页 OK 短按：录音/智能陪练/小智对话/返回
     void MoveSelection(int delta);
 
     /* 工牌配置就绪（已在主线程）→ 刷新界面 */
     void OnBadgeProfile(const BadgeProfile& profile);
-    void OnAvatarGif(const std::string& emoji_id, std::vector<uint8_t> gif);  // 头像动图就绪（主线程）
+    void OnAvatarImage(const std::string& emoji_id, uint8_t* data, size_t len);  // 头像静态图就绪（主线程，取得 data 所有权）
 
     /* 设置页编排（《MVP设计文档.md》设置页一节） */
     enum class SettingsPage { kMenu, kDeviceInfo, kVolume, kConfirmReset };
     void EnterSettings();
-    void LeaveSettings();        // 回主菜单
+    void LeaveSettings();        // 回首页
     void RenderSettings();       // 组 SettingsView 快照 → ShowSettings
     void EnterSettingsItem();    // 设置菜单 OK：进子页 / 进配网 / 出确认页
     void MoveSettingsSelection(int delta);
     void SetSettingsVolume(int volume);  // 夹取 0-100 后写 Codec（内含 NVS 持久化）
     void DoFactoryReset();       // 擦 NVS + 重启
 
-    /* 配网页编排（开机未配网 / 设置里“Wi-Fi 重新配网”） */
-    void EnterProvisioning(bool from_settings);
+    /* 配网页编排（仅 设置→“Wi-Fi 重新配网” 进入） */
+    void EnterProvisioning(ProvOrigin origin);
     void ExitProvisioning(bool to_settings);
     void CancelProvisioning();
+
+    /* 联网功能守卫（录音/智能陪练/小智对话）：已联网返回 true；
+     * 未联网弹一次离线提醒（每离线周期仅一次）并返回 false，不跳配网页、不动网络。 */
+    bool RequireNetwork();
+    void NotifyOfflineOnce();
 
     /* 智能陪练编排 */
     enum class PracticeState {
@@ -102,7 +110,7 @@ private:
     };
 
     void EnterPractice();
-    void LeavePractice();                 // 恢复连接配置 + 关通道 + 回主菜单
+    void LeavePractice();                 // 恢复连接配置 + 关通道 + 回首页
     void FetchScenarios();                // 异步拉取场景列表（practice_api_url）
     void OnScenariosFetched(std::vector<ScenarioItem> items, std::string toast);
     void BeginDialog(const ScenarioItem& scenario);  // 连接切换 + 发起连接
@@ -119,8 +127,11 @@ private:
     static void PracticeTimerCallback(void* arg);
     static void PracticeFetchTask(void* arg);
 
-    bool menu_open_ = false;
-    int menu_selected_ = 0;
+    bool home_open_ = false;   // 主页面·首页态（纯工牌 + 暗提示）
+    bool nav_open_ = false;    // 导航页（主菜单 / 设置 两行列表）
+    bool menu_open_ = false;   // 主菜单页（录音/陪练/对话/返回）
+    int nav_selected_ = 0;     // 导航页选中项（0=主菜单 1=设置）
+    int menu_selected_ = 0;    // 主菜单页选中项（0=录音 1=陪练 2=对话 3=返回）
 
     // ---- 设置页状态 ----
     SettingsPage settings_page_ = SettingsPage::kMenu;
@@ -130,12 +141,13 @@ private:
     std::atomic<bool> capturing_{false};
     std::atomic<int64_t> capture_start_us_{0};
 
-    // ---- 头像动图 ----
-    std::string badge_avatar_id_;  // 当前界面显示的头像 emoji_id（空=姓名首字占位）
+    // ---- 头像静态图 ----
+    std::string badge_avatar_id_;  // 当前界面显示的头像 emoji_id（空=默认 😀 头像）
 
     // ---- 配网状态 ----
     bool provisioning_ = false;
-    bool provisioning_from_settings_ = false;
+    ProvOrigin provisioning_origin_ = ProvOrigin::kBoot;  // 进入来源（决定长按 OK 取消去向）
+    bool offline_notice_shown_ = false;  // 本离线周期的一次性提醒已弹过（联网后复位）
 
     // ---- 智能陪练状态 ----
     PracticeState practice_state_ = PracticeState::kNone;

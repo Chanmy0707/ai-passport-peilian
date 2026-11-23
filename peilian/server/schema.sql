@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS badge_profile (
     title        TEXT,
     employee_no  TEXT,
     qr_text      TEXT,
-    avatar_id    TEXT,          -- 动态 emoji 素材 id，设备云端按需下载 /emojis/64px/<id>.gif 并缓存；NULL 回落姓名首字占位（§5.2）
+    avatar_id    TEXT,          -- 静态 emoji 素材 id，设备云端按需下载 /emojis/64px/<id>.png 并缓存；NULL 时服务端默认 grinning_face（😀，§5.2）
     updated_at   TEXT NOT NULL
 );
 

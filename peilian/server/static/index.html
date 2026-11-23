@@ -271,21 +271,21 @@
 <div class="modal-mask" id="badgeModal">
   <div class="modal">
     <h3>工牌配置</h3>
-    <div class="form-row"><label>绑定设备 device_id *</label><input type="text" id="bgDevice"></div>
+    <div class="form-row"><label>绑定设备 device_id *（下拉选择已注册设备）</label><input type="text" id="bgDevice" list="devicePresets" placeholder="选择或输入设备 ID"><datalist id="devicePresets"></datalist></div>
     <div class="form-row"><label>姓名 *</label><input type="text" id="bgName"></div>
     <div class="form-row"><label>职位</label><input type="text" id="bgTitle"></div>
     <div class="form-row"><label>工号</label><input type="text" id="bgNo"></div>
     <div class="form-row"><label>二维码文本</label><input type="text" id="bgQr"></div>
     <div class="form-row">
-      <label>头像素材 avatar_id（云端动态 emoji 素材，笑脸和情感）</label>
+      <label>头像素材 avatar_id（云端静态 emoji 素材，表情与情感）</label>
       <div style="display:flex; gap:8px; align-items:center">
-        <input type="text" id="bgAvatar" list="avatarPresets" placeholder="留空则回落姓名首字占位" style="flex:1">
+        <input type="text" id="bgAvatar" list="avatarPresets" placeholder="留空默认 😀（grinning_face）" style="flex:1">
         <img id="bgAvatarPreview" alt="" width="40" height="40" style="display:none">
       </div>
       <datalist id="avatarPresets"></datalist>
     </div>
     <div class="form-actions">
-      <button class="btn" id="bgRead">读取现有配置</button>
+      <button class="btn" id="bgRead">重新读取</button>
       <button class="btn" id="bgCancel">取消</button>
       <button class="btn primary" id="bgSave">保存</button>
     </div>
@@ -561,12 +561,53 @@ $('segList').addEventListener('click', (e) => {
 });
 
 /* ---------- 工牌配置弹窗 ---------- */
-function openBadge() { $('badgeModal').classList.add('show'); }
+async function openBadge() {
+  $('badgeModal').classList.add('show');
+  loadAdminDevices();     /* 设备下拉（含联网时间与工牌状态） */
+  loadBadgeConfig();      /* 已填设备 ID 时自动回填现有配置 */
+}
 $('navBadge').addEventListener('click', openBadge);
 $('btnBadge').addEventListener('click', openBadge);
 $('bgCancel').addEventListener('click', () => $('badgeModal').classList.remove('show'));
 
-/* 头像素材：云端 /emojis/manifest.json（笑脸和情感动态 emoji 集） */
+/* 设备列表：管理端 /api/v1/devices，选项带最近联网时间与工牌配置状态 */
+let adminDevices = [];
+async function loadAdminDevices() {
+  try {
+    adminDevices = await api('/api/v1/devices', { headers: adminHeaders() });
+  } catch (e) { return; /* api() 已提示 */ }
+  $('devicePresets').innerHTML = (adminDevices || [])
+    .map((d) => {
+      const badge = d.badge_name ? `工牌:${d.badge_name}` : '未配工牌';
+      const seen = d.last_seen ? `在线:${fmtTime(d.last_seen)}` : '从未联网';
+      return `<option value="${d.device_id}" label="${d.name || d.device_id} · ${badge} · ${seen}">`;
+    })
+    .join('');
+}
+
+/* 读取现有配置并回填（管理员令牌）：打开弹窗/切换设备自动触发，保存后的配置不会丢 */
+async function loadBadgeConfig() {
+  const dev = $('bgDevice').value.trim();
+  if (!dev) return;
+  try {
+    const res = await fetch(`/api/v1/devices/${encodeURIComponent(dev)}/badge`, {
+      headers: adminHeaders(),
+    });
+    if (!res.ok) return;  /* 404 未配置工牌 / 令牌失效：保持空表单 */
+    const body = await res.json();
+    $('bgName').value = body.name || '';
+    $('bgTitle').value = body.title || '';
+    $('bgNo').value = body.employee_no || '';
+    $('bgQr').value = body.qr_text || '';
+    $('bgAvatar').value = body.avatar_id || '';
+    updateAvatarPreview();
+    toast('已回填该设备现有配置');
+  } catch (e) { /* 网络错误：保持空表单 */ }
+}
+$('bgDevice').addEventListener('change', loadBadgeConfig);
+$('bgRead').addEventListener('click', loadBadgeConfig);
+
+/* 头像素材：云端 /emojis/manifest.json（表情与情感静态 emoji 集） */
 let avatarManifest = null;
 async function loadAvatarPresets() {
   if (avatarManifest) return avatarManifest;
@@ -588,25 +629,6 @@ function updateAvatarPreview() {
 $('bgAvatar').addEventListener('input', updateAvatarPreview);
 loadAvatarPresets().then(updateAvatarPreview);
 
-$('bgRead').addEventListener('click', async () => {
-  const dev = $('bgDevice').value.trim();
-  if (!dev) { toast('请先填写设备 ID'); return; }
-  try {
-    const res = await fetch(`/api/v1/devices/${encodeURIComponent(dev)}/badge`, {
-      headers: { 'X-Device-Token': $('deviceToken').value.trim() },
-    });
-    const body = await res.json();
-    if (!res.ok) { toast(body.error ? body.error.message : '读取失败'); return; }
-    $('bgName').value = body.name || '';
-    $('bgTitle').value = body.title || '';
-    $('bgNo').value = body.employee_no || '';
-    $('bgQr').value = body.qr_text || '';
-    $('bgAvatar').value = body.avatar_id || '';
-    updateAvatarPreview();
-    toast('已读取现有配置');
-  } catch (e) { toast('读取失败'); }
-});
-
 $('bgSave').addEventListener('click', async () => {
   const dev = $('bgDevice').value.trim();
   const name = $('bgName').value.trim();
@@ -623,7 +645,7 @@ $('bgSave').addEventListener('click', async () => {
         avatar_id: $('bgAvatar').value.trim() || null,
       }),
     });
-    toast('工牌配置已保存，设备开机即生效');
+    toast('工牌配置已保存，设备联网后约 15 秒自动更新');
     $('badgeModal').classList.remove('show');
   } catch (e) { /* toast 已提示 */ }
 });
