@@ -24,6 +24,11 @@ def init_db() -> None:
     schema = (SERVER_ROOT / "schema.sql").read_text(encoding="utf-8")
     with _write_lock, get_db() as conn:
         conn.executescript(schema)
+        # 旧库迁移：recording_session 补 uploaded_at（§6.2 上传时间）
+        try:
+            conn.execute("ALTER TABLE recording_session ADD COLUMN uploaded_at TEXT")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
 
 
 def rows(conn: sqlite3.Cursor) -> list[dict]:

@@ -4,8 +4,9 @@
  *   - 主页面（lv_layer_top 全屏覆盖层）：顶部状态栏（时间 / 日期 / Wi-Fi / 电量）+
  *     大头像居中（动图 / 首字占位）+ 姓名、岗位·工号居中 + 底部暗提示"按 OK 进入菜单"
  *     或录音状态区（工牌录音态）。
- *   - 导航页（独立整页）：主菜单 / 设置 两行列表
+ *   - 导航页（独立整页）：主菜单 / 设置 / 工牌 三行列表
  *     （UP/DOWN 选择、OK 进入、长按 OK 回首页）。
+ *   - 工牌绑定页（独立整页）：设备码 + 当前工牌 + "同步工牌"（OK 立即拉取云端配置并反馈结果）。
  *   - 主菜单页（独立整页）：录音 / 智能陪练 / 小智对话 / 返回
  *     （UP/DOWN 选择、OK 进入、长按 OK 进小智对话）。
  *   - 配网页：Wi-Fi 配网提示（热点名 + 配网地址），开机未配网或设置里重新配网时显示。
@@ -62,9 +63,16 @@ public:
     /* 主页面·首页态（纯工牌：大头像居中 + 姓名/岗位·工号 + 底部暗提示"按 OK 进入菜单"） */
     void ShowHome();
 
-    /* 导航页（独立整页：主菜单 / 设置 两行列表，UP/DOWN 选择、OK 进入、长按 OK 回首页） */
+    /* 导航页（独立整页：主菜单 / 设置 / 工牌 三行列表，UP/DOWN 选择、OK 进入、长按 OK 回首页） */
     void ShowNav(int selected);
     void SetNavSelected(int selected);
+
+    /* 工牌绑定页（独立整页）：设备码 + 当前工牌 + "同步工牌"项（OK 立即拉取云端配置）。
+     * 同步状态由 provider 每秒回询（返回非空则刷新状态行），结果支持"同步成功/未绑定/同步失败"。 */
+    void ShowBadgeInfo(const std::string& device_id, const BadgeProfile& profile, int selected);
+    void SetBadgeInfoStatus(const char* text);
+    void SetBadgeInfoCurrent(const std::string& name_or_unbound);
+    void SetBadgeSyncProvider(std::function<const char*()> provider);
 
     /* 主菜单页（独立整页：录音 / 智能陪练 / 小智对话 / 返回） */
     void ShowMenu(int selected);

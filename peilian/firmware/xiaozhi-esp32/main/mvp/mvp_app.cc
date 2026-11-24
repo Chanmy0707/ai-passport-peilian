@@ -29,9 +29,10 @@
 #define TAG "mvp_app"
 
 namespace {
-/* 导航页两项：0=主菜单 1=设置。 */
+/* 导航页三项：0=主菜单 1=设置 2=工牌。 */
 constexpr int kNavItemMenu = 0;
 constexpr int kNavItemSettings = 1;
+constexpr int kNavItemBadge = 2;
 
 /* 主菜单页项：0=录音 1=智能陪练 2=小智对话 3=返回。 */
 constexpr int kMenuItemRecord = 0;
@@ -79,6 +80,9 @@ void MvpApp::Init() {
     RecordClient::GetInstance().SetBadgeProfileCallback([this](const BadgeProfile& profile) {
         Application::GetInstance().Schedule([this, profile]() { OnBadgeProfile(profile); });
     });
+
+    // 工牌绑定页手动同步状态回询（UI tick 任务调用，内部读原子量/互斥快照）
+    MvpUi::GetInstance().SetBadgeSyncProvider([this]() { return PollBadgeSyncStatus(); });
 
     // 头像静态图按需下载/缓存命中后回调（badge 任务内）→ 调度到主线程覆盖默认 😀 头像
     RecordClient::GetInstance().SetAvatarCallback(
@@ -137,27 +141,43 @@ bool MvpApp::HandleKey(int key, bool long_press) {
         return false;  // UP/DOWN 长按走默认音量
     }
 
-    // 导航页：主菜单 / 设置 两项，UP/DOWN 选择、OK 进入（长按=返回首页）
+    // 导航页：主菜单 / 设置 / 工牌 三项，UP/DOWN 选择、OK 进入（长按=返回首页）
     if (nav_open_) {
         if (key == 2) {  // OK
             if (long_press) {
                 GoToHome();
             } else if (nav_selected_ == kNavItemMenu) {
                 OpenMenu();
+            } else if (nav_selected_ == kNavItemBadge) {
+                OpenBadgeInfo();
             } else {
                 ModeManager_Switch(MODE_SETTINGS);
                 nav_open_ = false;
+                badge_info_open_ = false;
                 home_open_ = false;
                 EnterSettings();
             }
             return true;
         }
-        if (!long_press && (key == 0 || key == 1)) {  // UP/DOWN 两项切换
-            nav_selected_ = (nav_selected_ == kNavItemMenu) ? kNavItemSettings : kNavItemMenu;
+        if (!long_press && (key == 0 || key == 1)) {  // UP/DOWN 短按三项循环
+            nav_selected_ = (nav_selected_ + (key == 0 ? -1 : +1) + 3) % 3;
             MvpUi::GetInstance().SetNavSelected(nav_selected_);
             return true;
         }
         return false;  // UP/DOWN 长按走默认音量
+    }
+
+    // 工牌绑定页：OK 短按=立即同步（长按=回首页）
+    if (badge_info_open_) {
+        if (key == 2) {
+            if (long_press) {
+                GoToHome();
+            } else {
+                StartBadgeSync();
+            }
+            return true;
+        }
+        return false;  // UP/DOWN 走默认音量
     }
 
     // 主页面·首页态：纯工牌展示，OK 进导航页（长按=小智对话）
@@ -351,6 +371,7 @@ void MvpApp::GoToHome() {
     home_open_ = true;
     nav_open_ = false;
     menu_open_ = false;
+    badge_info_open_ = false;
     MvpUi::GetInstance().ShowHome();
 }
 
@@ -359,6 +380,7 @@ void MvpApp::OpenNav() {
     home_open_ = false;
     nav_open_ = true;
     menu_open_ = false;
+    badge_info_open_ = false;
     MvpUi::GetInstance().ShowNav(nav_selected_);
 }
 
@@ -371,6 +393,7 @@ void MvpApp::GoToChat() {
     home_open_ = false;
     nav_open_ = false;
     menu_open_ = false;
+    badge_info_open_ = false;
     Settings settings("mvp", true);
     settings.SetString("last_mode", "chat");
     MvpUi::GetInstance().ShowChat();
@@ -380,8 +403,60 @@ void MvpApp::OpenMenu() {
     StopCapture();  // 菜单态不录音
     nav_open_ = false;
     menu_open_ = true;
+    badge_info_open_ = false;
     menu_selected_ = kMenuItemRecord;
     MvpUi::GetInstance().ShowMenu(menu_selected_);
+}
+
+void MvpApp::OpenBadgeInfo() {
+    StopCapture();  // 信息页不录音
+    nav_open_ = false;
+    menu_open_ = false;
+    home_open_ = false;
+    badge_info_open_ = true;
+    badge_sync_pending_ = false;
+    MvpUi::GetInstance().ShowBadgeInfo(GetMvpConfig().device_id,
+                                       RecordClient::GetInstance().GetBadgeProfile(), 0);
+}
+
+void MvpApp::StartBadgeSync() {
+    if (badge_sync_pending_.load()) {
+        return;  // 上一次同步还在等结果
+    }
+    auto& rc = RecordClient::GetInstance();
+    badge_sync_start_us_ = esp_timer_get_time();
+    badge_sync_pending_ = true;
+    rc.FetchBadgeProfileAsync();  // 与 15s 自动轮询共用任务（进行中则复用本次结果）
+    MvpUi::GetInstance().SetBadgeInfoStatus("拉取中");
+}
+
+const char* MvpApp::PollBadgeSyncStatus() {
+    if (!badge_sync_pending_.load()) {
+        return nullptr;
+    }
+    auto& rc = RecordClient::GetInstance();
+    int64_t elapsed_us = esp_timer_get_time() - badge_sync_start_us_.load();
+    if (elapsed_us < 1500000 || rc.IsBadgeFetching()) {
+        return nullptr;  // 仍在拉取
+    }
+    badge_sync_pending_ = false;
+    const char* status = "同步失败";
+    switch (rc.GetBadgeLastResult()) {
+        case BadgeFetchResult::kOk:
+            status = "同步成功";
+            break;
+        case BadgeFetchResult::kNotConfigured:
+            status = "未绑定";
+            break;
+        default:
+            break;
+    }
+    BadgeProfile p = rc.GetBadgeProfile();
+    std::string cur = (p.valid && !p.name.empty()) ? p.name : "未绑定";
+    Application::GetInstance().Schedule([cur]() {
+        MvpUi::GetInstance().SetBadgeInfoCurrent(cur);
+    });
+    return status;
 }
 
 void MvpApp::EnterSelected() {

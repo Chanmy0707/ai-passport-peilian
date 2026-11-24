@@ -404,10 +404,12 @@ bool RecordClient::FetchBadgeProfile(BadgeProfile* out) {
     const auto& cfg = GetMvpConfig();
     auto network = Board::GetInstance().GetNetwork();
     if (network == nullptr) {
+        badge_last_result_ = static_cast<int>(BadgeFetchResult::kFailed);
         return false;
     }
     auto http = network->CreateHttp(1);
     if (http == nullptr) {
+        badge_last_result_ = static_cast<int>(BadgeFetchResult::kFailed);
         return false;
     }
     http->SetTimeout(10000);
@@ -415,30 +417,36 @@ bool RecordClient::FetchBadgeProfile(BadgeProfile* out) {
     std::string url = cfg.badge_api_url + "/devices/" + cfg.device_id + "/badge";
     if (auto opened = http->Open("GET", url); !opened) {
         ESP_LOGW(TAG, "badge 拉取失败: %s", opened.error().ToString().c_str());
+        badge_last_result_ = static_cast<int>(BadgeFetchResult::kFailed);
         return false;
     }
     auto status = http->GetStatusCode();
     if (!status) {
+        badge_last_result_ = static_cast<int>(BadgeFetchResult::kFailed);
         return false;
     }
     if (*status == 404) {
         ESP_LOGI(TAG, "设备未配置工牌");
         http->Close();
+        badge_last_result_ = static_cast<int>(BadgeFetchResult::kNotConfigured);
         return false;
     }
     if (*status != 200) {
         ESP_LOGW(TAG, "badge HTTP 状态码 %d", *status);
         http->Close();
+        badge_last_result_ = static_cast<int>(BadgeFetchResult::kFailed);
         return false;
     }
     std::string body = http->ReadAll();
     http->Close();
     if (!ParseBadgeJson(body, out)) {
         ESP_LOGW(TAG, "badge 响应解析失败");
+        badge_last_result_ = static_cast<int>(BadgeFetchResult::kFailed);
         return false;
     }
     Settings settings("mvp", true);
     settings.SetString("badge_json", body);
+    badge_last_result_ = static_cast<int>(BadgeFetchResult::kOk);
     return true;
 }
 

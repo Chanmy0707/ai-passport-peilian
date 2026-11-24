@@ -64,10 +64,15 @@ private:
     /* 首页/导航页/菜单/模式编排 */
     void GoToHome();          // 回首页（纯工牌展示 + 暗提示）
     void GoToChat();          // 回小智对话（隐藏主页面覆盖层）
-    void OpenNav();           // 首页按 OK → 导航页（主菜单 / 设置）
+    void OpenNav();           // 首页按 OK → 导航页（主菜单 / 设置 / 工牌）
     void OpenMenu();          // 导航页选主菜单 → 主菜单页
     void EnterSelected();     // 主菜单页 OK 短按：录音/智能陪练/小智对话/返回
     void MoveSelection(int delta);
+    void OpenBadgeInfo();     // 导航页选工牌 → 工牌绑定页（设备码 + 同步工牌）
+    void StartBadgeSync();    // 工牌绑定页 OK：立即拉取云端工牌配置
+    /* UI 定时器回询（tick 任务调用）：手动同步完成后返回结果文案（"同步成功/未绑定/同步失败"），
+     * 拉取中/无变化返回 nullptr。当前工牌行经 Schedule 回主线程刷新。 */
+    const char* PollBadgeSyncStatus();
 
     /* 工牌配置就绪（已在主线程）→ 刷新界面 */
     void OnBadgeProfile(const BadgeProfile& profile);
@@ -128,10 +133,15 @@ private:
     static void PracticeFetchTask(void* arg);
 
     bool home_open_ = false;   // 主页面·首页态（纯工牌 + 暗提示）
-    bool nav_open_ = false;    // 导航页（主菜单 / 设置 两行列表）
+    bool nav_open_ = false;    // 导航页（主菜单 / 设置 / 工牌 三行列表）
     bool menu_open_ = false;   // 主菜单页（录音/陪练/对话/返回）
-    int nav_selected_ = 0;     // 导航页选中项（0=主菜单 1=设置）
+    int nav_selected_ = 0;     // 导航页选中项（0=主菜单 1=设置 2=工牌）
     int menu_selected_ = 0;    // 主菜单页选中项（0=录音 1=陪练 2=对话 3=返回）
+
+    // ---- 工牌绑定页（设备码 + 手动同步）----
+    bool badge_info_open_ = false;
+    std::atomic<bool> badge_sync_pending_{false};  // 手动同步等待完成（UI tick 回询判定）
+    std::atomic<int64_t> badge_sync_start_us_{0};
 
     // ---- 设置页状态 ----
     SettingsPage settings_page_ = SettingsPage::kMenu;

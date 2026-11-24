@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS recording_session (
     device_id   TEXT NOT NULL,
     started_at  TEXT NOT NULL,
     ended_at    TEXT,
+    uploaded_at TEXT,                                  -- 上传完成（record.stop）时刻，列表"上传时间"显示用（§6.2）
     status      TEXT NOT NULL DEFAULT 'uploading',  -- uploading/done/failed
     audio_bytes INTEGER NOT NULL DEFAULT 0,
     acked_seq   INTEGER NOT NULL DEFAULT -1         -- 补传唯一事实来源（§6.2），-1 表示未确认

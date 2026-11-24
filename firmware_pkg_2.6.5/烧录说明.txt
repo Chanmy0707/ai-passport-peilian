@@ -1,0 +1,66 @@
+folotoy/ai-passport 固件包 v2.6.5
+生成日期：2026-11-24    芯片：ESP32-C3    Flash：8MB
+v2.6.5 相对 v2.6.4 的改动：
+  1. 新增"工牌绑定"页（导航页第三项"工牌"）：显示本机设备码（后台绑定
+     用）与当前工牌姓名；"同步工牌"按 OK 立即拉取云端工牌配置并显示结果
+     （同步成功 / 未绑定 / 同步失败），配置后无需等轮询即可确认。
+  2. 导航页由"主菜单/设置"两行扩为"主菜单/设置/工牌"三行列表。
+本版更新（含 v2.6.4 全部内容）：
+  0. 工牌配置自动同步（v2.6.1 起已含，本版不变）：后台"工牌配置"保存后
+     设备开机立即拉取 + 每 15 秒比对 updated_at，约 15 秒内自动刷新显示，
+     无需重启、无需手动同步；"同步工牌"仅为手动立即确认入口。
+  1. 静态表情头像（PNG 素材库，默认 😀 grinning_face）+ 分配判空
+     （堆不足仅告警并重试，不崩溃）+ esp_timer 任务栈 8192（稳定性）。
+  2. 首页方案C（大头像居中）+ 顶栏四项（时间/日期/Wi-Fi/电量）+
+     导航页 + 离线一次性提醒（不跳配网页）。
+含分区表（mvp_ring 576KB + mvp_emoji 64KB），升级必须整包烧录（含分区表），
+不能只烧主程序。
+
+一、包内容
+  folotoy-ai-passport-2.6.5-merged.bin  合并镜像（推荐，单文件烧录）
+  flash.sh / flash.bat                  一键烧录脚本（Linux/macOS / Windows）
+  bins/                                 分区单独镜像（需要单独烧某个分区时用）
+
+二、烧录步骤
+  1. 安装依赖：pip install esptool
+  2. USB 连接设备，确认串口：
+     - Windows：设备管理器里看 COM 口
+     - Linux/macOS：ls /dev/ttyACM* 或 /dev/ttyUSB*
+  3. 执行：
+     - Windows：flash.bat COM3        （换成实际 COM 口）
+     - Linux/macOS：./flash.sh        （默认 /dev/ttyACM0，可传参换串口）
+  4. 烧录完成后设备自动重启。
+
+  等效手动命令（不用脚本时）：
+    python -m esptool --chip esp32c3 -b 460800 --before default-reset --after hard-reset \
+      --flash-mode dio --flash-size 8MB --flash-freq 80m -p <串口> \
+      write-flash 0x0 folotoy-ai-passport-2.6.5-merged.bin
+
+  分区单独烧录地址（bins/ 目录）：
+    0x0      bootloader.bin
+    0x8000   partition-table.bin
+    0xd000   ota_data_initial.bin
+    0x20000  xiaozhi.bin            （主程序）
+    0x600000 generated_assets.bin   （字体/图片资源，必须烧，否则 UI 无中文字体）
+
+三、本版真机验证要点（刷机后核实）
+  1. 导航页三行：首页短按 OK → "主菜单/设置/工牌"；UP/DOWN 可在三行间
+     循环、长按 OK 返回首页。
+  2. 工牌绑定页：显示设备码与当前工牌姓名（未配置显示"未绑定"）；
+     按 OK 显示"拉取中"，随后显示"同步成功 / 未绑定 / 同步失败"之一，
+     "当前"行同步刷新。
+  3. 后台联动：管理后台"工牌配置"对该设备码保存资料 → 不做任何操作，
+     约 15 秒内首页工牌自动更新；再进工牌绑定页按 OK 应立即"同步成功"。
+  4. 回归：首页大头像/顶栏四项、录音、智能陪练、小智对话、设置、配网、
+     离线提醒均正常。
+
+四、联网与绑定（工牌模式）
+  - 设备开机后按板载流程配网（设备热点/BLUFI）。
+  - device_id 自动取 WiFi MAC（十六进制），无需手工配置；本版可在
+    设置→导航页"工牌"里直接查看设备码。
+  - 服务端地址与设备令牌默认取编译期配置（record_ws_url / badge_api_url / device_token），
+    如需修改，通过 NVS settings 命名空间 mvp 下同名键覆盖。
+  - 工牌绑定：设备联网后在管理后台"工牌配置"页选该设备码、填写资料保存
+    （自动保存 + 回读校验）即可（PUT /api/v1/devices/{id}/badge）。
+  - 注意：emoji 素材库为静态 PNG（Twemoji CC-BY 4.0），旧 GIF 时代的
+    avatar_id 不在新库中，如显示默认 😀 请在管理端重选一次头像。

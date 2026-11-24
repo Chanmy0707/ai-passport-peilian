@@ -41,9 +41,10 @@ lv_color_t ClrDim()    { return lv_color_make(125, 125, 125); }
 lv_color_t ClrRec()    { return lv_color_make(225, 60, 50); }
 lv_color_t ClrCard()   { return lv_color_make(24, 24, 30); }
 
-const char* kNavLabels[2] = {
+const char* kNavLabels[3] = {
     "主菜单",
     "设置",
+    "工牌",
 };
 
 const char* kMenuLabels[4] = {
@@ -135,11 +136,18 @@ struct MvpUi::Impl {
     lv_obj_t* battery_label = nullptr; // 顶栏电量图标（icon 字体，最右）
     lv_obj_t* home_hint = nullptr;     // 首页底部暗提示：按 OK 进入菜单
 
-    // 导航页（独立整页）：主菜单 / 设置 两行列表
+    // 导航页（独立整页）：主菜单 / 设置 / 工牌 三行列表
     lv_obj_t* nav_root = nullptr;
-    lv_obj_t* nav_items[2] = {nullptr, nullptr};
-    lv_obj_t* nav_labels[2] = {nullptr, nullptr};
+    lv_obj_t* nav_items[3] = {nullptr, nullptr, nullptr};
+    lv_obj_t* nav_labels[3] = {nullptr, nullptr, nullptr};
     int nav_selected = 0;
+
+    // 工牌绑定页（独立整页）：设备码 + 当前工牌 + "同步工牌"项 + 同步状态行
+    lv_obj_t* badge_info_root = nullptr;
+    lv_obj_t* badge_info_dev = nullptr;    // 设备码值
+    lv_obj_t* badge_info_cur = nullptr;    // 当前工牌姓名/未绑定
+    lv_obj_t* badge_info_status = nullptr; // 同步状态（OK 开始/拉取中/同步成功/未绑定/同步失败）
+    std::function<const char*()> sync_provider;  // 每秒回询同步状态，返回非空刷新状态行
 
     // 主菜单页（独立整页）：录音 / 智能陪练 / 小智对话 / 返回
     lv_obj_t* menu_root = nullptr;
@@ -322,7 +330,7 @@ void MvpUi::Impl::EnsureObjects() {
     home_hint = MakeLabel(home_root, "按 OK 进入菜单", 0, h - 32, w);
     lv_obj_set_style_text_color(home_hint, ClrDim(), 0);
 
-    // ---- 导航页（独立整页）：主菜单 / 设置 两行列表（UP/DOWN 选择、OK 进入、长按 OK 回首页）----
+    // ---- 导航页（独立整页）：主菜单 / 设置 / 工牌 三行列表（UP/DOWN 选择、OK 进入、长按 OK 回首页）----
     nav_root = lv_obj_create(top);
     lv_obj_remove_flag(nav_root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(nav_root, LV_SCROLLBAR_MODE_OFF);
@@ -334,7 +342,7 @@ void MvpUi::Impl::EnsureObjects() {
     lv_obj_set_style_radius(nav_root, 0, 0);
     lv_obj_set_style_pad_all(nav_root, 0, 0);
     lv_obj_add_flag(nav_root, LV_OBJ_FLAG_HIDDEN);
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         nav_items[i] = MakeBox(nav_root, 20, 88 + i * 60, w - 40, 48);
         lv_obj_set_flex_flow(nav_items[i], LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(nav_items[i], LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
@@ -343,6 +351,35 @@ void MvpUi::Impl::EnsureObjects() {
     }
     lv_obj_t* nav_hint = MakeLabel(nav_root, "OK 进入  长按返回", 0, h - 32, w);
     lv_obj_set_style_text_color(nav_hint, ClrDim(), 0);
+
+    // ---- 工牌绑定页（导航页"工牌"进入）：设备码 + 当前工牌 + 同步工牌（OK 立即拉取）----
+    badge_info_root = lv_obj_create(top);
+    lv_obj_remove_flag(badge_info_root, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(badge_info_root, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_pos(badge_info_root, 0, 0);
+    lv_obj_set_size(badge_info_root, w, h);
+    lv_obj_set_style_bg_opa(badge_info_root, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(badge_info_root, ClrBg(), 0);
+    lv_obj_set_style_border_width(badge_info_root, 0, 0);
+    lv_obj_set_style_radius(badge_info_root, 0, 0);
+    lv_obj_set_style_pad_all(badge_info_root, 0, 0);
+    lv_obj_add_flag(badge_info_root, LV_OBJ_FLAG_HIDDEN);
+    MakeLabel(badge_info_root, "工牌绑定", 0, 18, w);
+    MakeLabel(badge_info_root, "设备码", 0, 70, w);
+    badge_info_dev = MakeLabel(badge_info_root, "", 0, 104, w);
+    badge_info_cur = MakeLabel(badge_info_root, "", 0, 144, w);
+    lv_obj_t* sync_item = MakeBox(badge_info_root, 20, 190, w - 40, 48);
+    lv_obj_set_style_bg_opa(sync_item, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(sync_item, ClrAccent(), 0);
+    lv_obj_set_style_border_width(sync_item, 0, 0);
+    lv_obj_set_flex_flow(sync_item, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sync_item, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_t* sync_label = MakeCenteredLabel(sync_item, "同步工牌");
+    lv_obj_set_style_text_color(sync_label, ClrBg(), 0);
+    badge_info_status = MakeLabel(badge_info_root, "", 0, 248, w);
+    lv_obj_t* info_hint = MakeLabel(badge_info_root, "OK 同步  长按主页", 0, h - 32, w);
+    lv_obj_set_style_text_color(info_hint, ClrDim(), 0);
 
     // ---- 主菜单页（独立整页，照陪练/设置页范式）：录音 / 智能陪练 / 小智对话 / 返回 ----
     menu_root = lv_obj_create(top);
@@ -475,7 +512,7 @@ void MvpUi::Impl::ApplyMenuStyle() {
 
 // 导航页选项样式：选中项绿色高亮（文字 ≤4 字、不加前缀标记，防止按钮溢出）。
 void MvpUi::Impl::ApplyNavStyle() {
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         if (nav_items[i] == nullptr || nav_labels[i] == nullptr) {
             continue;
         }
@@ -675,6 +712,13 @@ void MvpUi::Impl::Tick() {
     }
     RefreshTopbar();
     RefreshStatus();
+    // 工牌绑定页：每秒回询手动同步状态（返回非空刷新状态行；空=仍在拉取/无变化）
+    if (sync_provider != nullptr && badge_info_status != nullptr &&
+        badge_info_root != nullptr && !lv_obj_has_flag(badge_info_root, LV_OBJ_FLAG_HIDDEN)) {
+        if (const char* s = sync_provider(); s != nullptr) {
+            lv_label_set_text(badge_info_status, s);
+        }
+    }
 }
 
 MvpUi& MvpUi::GetInstance() {
@@ -723,6 +767,9 @@ void MvpUi::ShowHome() {
     if (impl_->nav_root != nullptr) {
         lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
     }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
+    }
     if (impl_->menu_root != nullptr) {
         lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
     }
@@ -753,7 +800,7 @@ void MvpUi::ShowNav(int selected) {
         impl_ = new Impl();
     }
     impl_->EnsureObjects();
-    impl_->nav_selected = (selected < 0 || selected > 1) ? 0 : selected;
+    impl_->nav_selected = (selected < 0 || selected > 2) ? 0 : selected;
     if (impl_->practice_root != nullptr) {
         lv_obj_add_flag(impl_->practice_root, LV_OBJ_FLAG_HIDDEN);
     }
@@ -773,6 +820,9 @@ void MvpUi::ShowNav(int selected) {
     if (impl_->nav_root != nullptr) {
         lv_obj_remove_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
     }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
+    }
     impl_->badge_visible = false;
     impl_->ApplyNavStyle();
     impl_->StopTick();
@@ -791,8 +841,105 @@ void MvpUi::SetNavSelected(int selected) {
         impl_ = new Impl();
     }
     impl_->EnsureObjects();
-    impl_->nav_selected = (selected < 0 || selected > 1) ? 0 : selected;
+    impl_->nav_selected = (selected < 0 || selected > 2) ? 0 : selected;
     impl_->ApplyNavStyle();
+}
+
+void MvpUi::ShowBadgeInfo(const std::string& device_id, const BadgeProfile& profile, int selected) {
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+    DisplayLockGuard guard(display);
+    if (!guard) {
+        return;
+    }
+    if (impl_ == nullptr) {
+        impl_ = new Impl();
+    }
+    impl_->EnsureObjects();
+    (void)selected;  // 单一操作项"同步工牌"，恒高亮
+    if (impl_->practice_root != nullptr) {
+        lv_obj_add_flag(impl_->practice_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->settings_root != nullptr) {
+        lv_obj_add_flag(impl_->settings_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->prov_root != nullptr) {
+        lv_obj_add_flag(impl_->prov_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->home_root != nullptr) {
+        lv_obj_add_flag(impl_->home_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->menu_root != nullptr) {
+        lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->nav_root != nullptr) {
+        lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_remove_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->badge_info_dev != nullptr) {
+        lv_label_set_text(impl_->badge_info_dev, device_id.c_str());
+    }
+    if (impl_->badge_info_cur != nullptr) {
+        lv_label_set_text(impl_->badge_info_cur,
+                          (profile.valid && !profile.name.empty()) ? profile.name.c_str() : "未绑定");
+    }
+    if (impl_->badge_info_status != nullptr) {
+        lv_label_set_text(impl_->badge_info_status, "");
+    }
+    impl_->badge_visible = false;
+    impl_->StartTick();  // 每秒回询同步状态
+}
+
+void MvpUi::SetBadgeInfoStatus(const char* text) {
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+    DisplayLockGuard guard(display);
+    if (!guard) {
+        return;
+    }
+    if (impl_ == nullptr || impl_->badge_info_status == nullptr) {
+        return;
+    }
+    lv_label_set_text(impl_->badge_info_status, text);
+}
+
+void MvpUi::SetBadgeInfoCurrent(const std::string& name_or_unbound) {
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+    DisplayLockGuard guard(display);
+    if (!guard) {
+        return;
+    }
+    if (impl_ == nullptr || impl_->badge_info_cur == nullptr) {
+        return;
+    }
+    lv_label_set_text(impl_->badge_info_cur, name_or_unbound.c_str());
+}
+
+void MvpUi::SetBadgeSyncProvider(std::function<const char*()> provider) {
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+    DisplayLockGuard guard(display);
+    if (!guard) {
+        return;
+    }
+    if (impl_ == nullptr) {
+        impl_ = new Impl();
+    }
+    impl_->sync_provider = std::move(provider);
 }
 
 void MvpUi::ShowMenu(int selected) {
@@ -824,6 +971,9 @@ void MvpUi::ShowMenu(int selected) {
     }
     if (impl_->nav_root != nullptr) {
         lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
     }
     if (impl_->menu_root != nullptr) {
         lv_obj_remove_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
@@ -876,6 +1026,9 @@ void MvpUi::ShowBadge() {
     if (impl_->nav_root != nullptr) {
         lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
     }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
+    }
     if (impl_->home_hint != nullptr) {
         lv_obj_add_flag(impl_->home_hint, LV_OBJ_FLAG_HIDDEN);
     }
@@ -913,6 +1066,9 @@ void MvpUi::ShowChat() {
     }
     if (impl_->nav_root != nullptr) {
         lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
     }
     if (impl_->menu_root != nullptr) {
         lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
@@ -1084,6 +1240,9 @@ void MvpUi::ShowPractice(const PracticeView& view) {
     if (impl_->nav_root != nullptr) {
         lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
     }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
+    }
     if (impl_->menu_root != nullptr) {
         lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
     }
@@ -1134,6 +1293,9 @@ void MvpUi::ShowSettings(const SettingsView& view) {
     }
     if (impl_->nav_root != nullptr) {
         lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
     }
     if (impl_->menu_root != nullptr) {
         lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);
@@ -1188,6 +1350,9 @@ void MvpUi::ShowProvisioning(const std::string& ap_ssid, const std::string& ap_u
     }
     if (impl_->nav_root != nullptr) {
         lv_obj_add_flag(impl_->nav_root, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (impl_->badge_info_root != nullptr) {
+        lv_obj_add_flag(impl_->badge_info_root, LV_OBJ_FLAG_HIDDEN);
     }
     if (impl_->menu_root != nullptr) {
         lv_obj_add_flag(impl_->menu_root, LV_OBJ_FLAG_HIDDEN);

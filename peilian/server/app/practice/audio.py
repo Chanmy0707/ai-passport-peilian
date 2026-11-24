@@ -17,13 +17,24 @@ FRAME_PCM_BYTES = SAMPLES_PER_FRAME * 2  # int16
 SILENCE_RMS = 500
 
 
+_opuslib_missing_logged = False
+
+
 def _opuslib():
+    global _opuslib_missing_logged
     try:
         import opuslib  # noqa: PLC0415 延迟导入：缺 libopus 时仅降级不崩服务
 
         return opuslib
     except Exception as e:  # noqa: BLE001
-        logger.warning("opuslib 不可用，音频编解码降级为文本模式: %s", e)
+        if not _opuslib_missing_logged:
+            _opuslib_missing_logged = True
+            # §4.1：缺失会导致录音 WAV 无法生成、网页无法播放，必须醒目提示（仅记一次）
+            logger.error(
+                "opuslib 不可用（%s）：录音 WAV 封装与语音识别将降级，网页音频无法播放。"
+                "请执行 pip install opuslib 并安装系统 libopus 后重启服务",
+                e,
+            )
         return None
 
 

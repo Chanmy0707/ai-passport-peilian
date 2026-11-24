@@ -216,8 +216,9 @@ async def record_endpoint(ws: WebSocket) -> None:
                         continue
                     with get_db() as conn:
                         conn.execute(
-                            "UPDATE recording_session SET status = 'done', ended_at = ?, acked_seq = ? WHERE id = ?",
+                            "UPDATE recording_session SET status = 'done', ended_at = ?, uploaded_at = ?, acked_seq = ? WHERE id = ?",
                             (
+                                time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                 time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                 store.contiguous_acked(session_id),
                                 session_id,

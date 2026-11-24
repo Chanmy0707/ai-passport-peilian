@@ -155,7 +155,7 @@
 
     <div class="nav-group">语音质检</div>
     <button class="nav-item active" data-page="recordings">录音记录</button>
-    <button class="nav-item" id="navBadge">工牌配置</button>
+    <button class="nav-item" data-page="badge">工牌配置</button>
 
     <div class="nav-group">智能陪练</div>
     <button class="nav-item" data-page="roles">角色配置</button>
@@ -181,11 +181,12 @@
           <input type="date" id="fDate">
           <input type="text" id="fKeyword" placeholder="转写关键词" style="width:180px">
           <button class="btn primary" id="btnQuery">查询</button>
+          <button class="btn danger" id="btnBatchDel" disabled>批量删除</button>
           <button class="btn" id="btnBadge">工牌配置</button>
         </div>
         <div class="card">
           <table>
-            <thead><tr><th>开始时间</th><th>设备</th><th>时长</th><th>转写状态</th><th>操作</th></tr></thead>
+            <thead><tr><th style="width:36px"><input type="checkbox" id="recCheckAll" title="全选本页"></th><th>上传时间</th><th>设备</th><th>时长</th><th>转写状态</th><th>操作</th></tr></thead>
             <tbody id="recList"></tbody>
           </table>
           <div class="empty" id="recEmpty" style="display:none">暂无录音数据</div>
@@ -263,31 +264,30 @@
           <p class="muted">后续自研日常对话方案时，再纳入本后台管理。</p>
         </div>
       </section>
-    </div>
-  </div>
-</div>
 
-<!-- 工牌配置弹窗 -->
-<div class="modal-mask" id="badgeModal">
-  <div class="modal">
-    <h3>工牌配置</h3>
-    <div class="form-row"><label>绑定设备 device_id *（下拉选择已注册设备）</label><input type="text" id="bgDevice" list="devicePresets" placeholder="选择或输入设备 ID"><datalist id="devicePresets"></datalist></div>
-    <div class="form-row"><label>姓名 *</label><input type="text" id="bgName"></div>
-    <div class="form-row"><label>职位</label><input type="text" id="bgTitle"></div>
-    <div class="form-row"><label>工号</label><input type="text" id="bgNo"></div>
-    <div class="form-row"><label>二维码文本</label><input type="text" id="bgQr"></div>
-    <div class="form-row">
-      <label>头像素材 avatar_id（云端静态 emoji 素材，表情与情感）</label>
-      <div style="display:flex; gap:8px; align-items:center">
-        <input type="text" id="bgAvatar" list="avatarPresets" placeholder="留空默认 😀（grinning_face）" style="flex:1">
-        <img id="bgAvatarPreview" alt="" width="40" height="40" style="display:none">
-      </div>
-      <datalist id="avatarPresets"></datalist>
-    </div>
-    <div class="form-actions">
-      <button class="btn" id="bgRead">重新读取</button>
-      <button class="btn" id="bgCancel">取消</button>
-      <button class="btn primary" id="bgSave">保存</button>
+      <!-- 工牌配置 -->
+      <section id="page-badge" style="display:none">
+        <div class="card" style="max-width:620px">
+          <div class="form-row"><label>绑定设备 device_id *（下拉选择已注册设备）</label><input type="text" id="bgDevice" list="devicePresets" placeholder="选择或输入设备 ID"><datalist id="devicePresets"></datalist></div>
+          <div class="form-row"><label>姓名 *</label><input type="text" id="bgName"></div>
+          <div class="form-row"><label>职位</label><input type="text" id="bgTitle"></div>
+          <div class="form-row"><label>工号</label><input type="text" id="bgNo"></div>
+          <div class="form-row"><label>二维码文本</label><input type="text" id="bgQr"></div>
+          <div class="form-row">
+            <label>头像素材 avatar_id（云端静态 emoji 素材，表情与情感）</label>
+            <div style="display:flex; gap:8px; align-items:center">
+              <input type="text" id="bgAvatar" list="avatarPresets" placeholder="留空默认 😀（grinning_face）" style="flex:1">
+              <img id="bgAvatarPreview" alt="" width="40" height="40" style="display:none">
+            </div>
+            <datalist id="avatarPresets"></datalist>
+          </div>
+          <div class="muted" id="badgeStatus">改动后约 1 秒自动保存；保存后自动回读校验并显示结果。</div>
+          <div class="form-actions">
+            <button class="btn" id="bgRead">重新读取</button>
+            <button class="btn primary" id="bgSave">保存</button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </div>
@@ -432,7 +432,7 @@ $('deviceToken').addEventListener('change', () => localStorage.setItem('deviceTo
 
 /* ---------- 路由 ---------- */
 const TITLES = {
-  recordings: '录音记录', detail: '对话详情',
+  recordings: '录音记录', detail: '对话详情', badge: '工牌配置',
   roles: '角色配置', scenarios: '场景设置', daily: '对话管理',
 };
 let currentPage = 'recordings';
@@ -447,6 +447,7 @@ function showPage(page) {
     b.classList.toggle('active', on);
   });
   if (page === 'recordings') loadRecordings();
+  if (page === 'badge') openBadge();
   if (page === 'roles') loadRoles();
   if (page === 'scenarios') loadScenarios();
 }
@@ -485,11 +486,15 @@ async function loadRecordings() {
     recTotal = data.total;
     $('recList').innerHTML = data.items.map((r) => `
       <tr class="clickable" data-id="${r.id}">
-        <td>${fmtTime(r.started_at)}</td>
+        <td><input type="checkbox" class="rec-check" data-id="${r.id}" ${recChecked.has(r.id) ? 'checked' : ''}></td>
+        <td>${fmtTime(r.uploaded_at || r.ended_at || r.started_at)}</td>
         <td>${r.device_id}</td>
         <td>${fmtDuration(r.started_at, r.ended_at)}</td>
         <td>${statusTag(r.transcript_status)}</td>
-        <td><button class="btn" data-view="${r.id}">查看</button></td>
+        <td>
+          <button class="btn" data-view="${r.id}">查看</button>
+          <button class="btn danger" data-del="${r.id}">删除</button>
+        </td>
       </tr>`).join('');
     $('recEmpty').style.display = data.items.length ? 'none' : '';
     $('recTotal').textContent = `共 ${data.total} 条`;
@@ -502,10 +507,61 @@ async function loadRecordings() {
 $('btnQuery').addEventListener('click', () => { recPage = 1; loadRecordings(); });
 $('recPrev').addEventListener('click', () => { recPage--; loadRecordings(); });
 $('recNext').addEventListener('click', () => { recPage++; loadRecordings(); });
+/* 多选与批量删除（I6-5） */
+const recChecked = new Set();
+function syncBatchDel() {
+  $('btnBatchDel').disabled = recChecked.size === 0;
+  $('btnBatchDel').textContent = recChecked.size ? `批量删除（${recChecked.size}）` : '批量删除';
+}
+$('recCheckAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.rec-check').forEach((b) => {
+    b.checked = e.target.checked;
+    if (b.checked) recChecked.add(b.dataset.id); else recChecked.delete(b.dataset.id);
+  });
+  syncBatchDel();
+});
+$('recList').addEventListener('change', (e) => {
+  if (!e.target.classList.contains('rec-check')) return;
+  if (e.target.checked) recChecked.add(e.target.dataset.id); else recChecked.delete(e.target.dataset.id);
+  syncBatchDel();
+});
 $('recList').addEventListener('click', (e) => {
+  if (e.target.type === 'checkbox') return;
+  const delId = e.target.dataset.del;
+  if (delId) { deleteRecording(delId); return; }
   const id = e.target.dataset.view || e.target.closest('tr')?.dataset.id;
   if (id) openDetail(id);
 });
+
+/* 删除录音（I6-4）：级联清理转写/分段/音频文件，二次确认 */
+async function deleteRecording(id) {
+  if (!confirm('确认删除该录音？转写内容、分段与音频文件将一并删除，不可恢复。')) return;
+  try {
+    await api('/api/v1/recordings/' + id, { method: 'DELETE', headers: adminHeaders() });
+    recChecked.delete(id);
+    syncBatchDel();
+    toast('录音已删除');
+    loadRecordings();
+  } catch (e) { /* toast 已提示 */ }
+}
+
+async function batchDeleteRecordings() {
+  const ids = [...recChecked];
+  if (!ids.length) return;
+  if (!confirm(`确认删除选中的 ${ids.length} 条录音？转写、分段与音频文件将一并删除，不可恢复。`)) return;
+  try {
+    await api('/api/v1/recordings/batch-delete', {
+      method: 'POST',
+      headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    recChecked.clear();
+    syncBatchDel();
+    toast(`已删除 ${ids.length} 条录音`);
+    loadRecordings();
+  } catch (e) { /* toast 已提示 */ }
+}
+$('btnBatchDel').addEventListener('click', batchDeleteRecordings);
 
 /* ---------- 录音详情（含 409 轮询） ---------- */
 let detailPollTimer = null;
@@ -525,7 +581,7 @@ async function loadDetail(id) {
     const d = await api('/api/v1/recordings/' + id, { headers: adminHeaders() });
     clearInterval(detailPollTimer);
     $('dtTitle').textContent = `设备 ${d.device_id} · ${fmtTime(d.started_at)}`;
-    $('dtSub').textContent = `时长 ${fmtDuration(d.started_at, d.ended_at)} · 会话状态 ${d.status} · ${d.segments.length} 个分段`;
+    $('dtSub').textContent = `时长 ${fmtDuration(d.started_at, d.ended_at)} · 上传 ${fmtTime(d.uploaded_at || d.ended_at)} · 会话状态 ${d.status} · ${d.segments.length} 个分段`;
     $('segList').innerHTML = d.segments.map((s, i) => `
       <tr class="clickable" data-url="${s.file_url}">
         <td>${i + 1}</td>
@@ -536,7 +592,14 @@ async function loadDetail(id) {
       </tr>`).join('');
     $('segEmpty').style.display = d.segments.length ? 'none' : '';
     $('segEmpty').textContent = '该会话暂无分段';
-    $('player').removeAttribute('src');
+    // 默认加载首个分段 WAV，播放器开箱即可直接播放；点分段行再跳转对应分段
+    const first = d.segments.find((s) => s.file_url);
+    if (first) {
+      $('player').src = first.file_url;
+      $('player').load();
+    } else {
+      $('player').removeAttribute('src');
+    }
   } catch (e) {
     if (e.status === 409) {
       $('dtTitle').textContent = '转写未完成';
@@ -560,15 +623,13 @@ $('segList').addEventListener('click', (e) => {
   }
 });
 
-/* ---------- 工牌配置弹窗 ---------- */
+/* ---------- 工牌配置 ---------- */
 async function openBadge() {
-  $('badgeModal').classList.add('show');
   loadAdminDevices();     /* 设备下拉（含联网时间与工牌状态） */
+  if (!$('bgDevice').value.trim()) $('bgDevice').value = localStorage.getItem('badgeDevice') || '';
   loadBadgeConfig();      /* 已填设备 ID 时自动回填现有配置 */
 }
-$('navBadge').addEventListener('click', openBadge);
-$('btnBadge').addEventListener('click', openBadge);
-$('bgCancel').addEventListener('click', () => $('badgeModal').classList.remove('show'));
+$('btnBadge').addEventListener('click', () => showPage('badge'));
 
 /* 设备列表：管理端 /api/v1/devices，选项带最近联网时间与工牌配置状态 */
 let adminDevices = [];
@@ -585,15 +646,19 @@ async function loadAdminDevices() {
     .join('');
 }
 
-/* 读取现有配置并回填（管理员令牌）：打开弹窗/切换设备自动触发，保存后的配置不会丢 */
+/* 读取现有配置并回填（管理员令牌）：进入页面/切换设备自动触发，保存后的配置不会丢 */
 async function loadBadgeConfig() {
   const dev = $('bgDevice').value.trim();
-  if (!dev) return;
+  if (!dev) { $('badgeStatus').textContent = '请先选择或输入设备 ID'; return; }
   try {
     const res = await fetch(`/api/v1/devices/${encodeURIComponent(dev)}/badge`, {
       headers: adminHeaders(),
     });
-    if (!res.ok) return;  /* 404 未配置工牌 / 令牌失效：保持空表单 */
+    if (res.status === 404) {
+      $('badgeStatus').textContent = `设备 ${dev} 暂未配置工牌，填写后保存即可创建`;
+      return;
+    }
+    if (!res.ok) { toast('读取工牌配置失败 ' + res.status); return; }
     const body = await res.json();
     $('bgName').value = body.name || '';
     $('bgTitle').value = body.title || '';
@@ -601,10 +666,14 @@ async function loadBadgeConfig() {
     $('bgQr').value = body.qr_text || '';
     $('bgAvatar').value = body.avatar_id || '';
     updateAvatarPreview();
+    $('badgeStatus').textContent = `已回填 ${dev} 现有配置（云端更新于 ${fmtTime(body.updated_at)}）`;
     toast('已回填该设备现有配置');
-  } catch (e) { /* 网络错误：保持空表单 */ }
+  } catch (e) { $('badgeStatus').textContent = '读取失败：网络错误'; }
 }
-$('bgDevice').addEventListener('change', loadBadgeConfig);
+$('bgDevice').addEventListener('change', () => {
+  localStorage.setItem('badgeDevice', $('bgDevice').value.trim());
+  loadBadgeConfig();
+});
 $('bgRead').addEventListener('click', loadBadgeConfig);
 
 /* 头像素材：云端 /emojis/manifest.json（表情与情感静态 emoji 集） */
@@ -629,26 +698,60 @@ function updateAvatarPreview() {
 $('bgAvatar').addEventListener('input', updateAvatarPreview);
 loadAvatarPresets().then(updateAvatarPreview);
 
-$('bgSave').addEventListener('click', async () => {
+/* 保存（手动按钮 + 防抖自动保存）：改动后约 1 秒自动写库，保存后回读校验并显示结果 */
+async function saveBadge(manual) {
   const dev = $('bgDevice').value.trim();
   const name = $('bgName').value.trim();
-  if (!dev || !name) { toast('设备 ID 与姓名必填'); return; }
+  if (!dev || !name) { if (manual) toast('设备 ID 与姓名必填'); return; }
+  const payload = {
+    name,
+    title: $('bgTitle').value.trim() || null,
+    employee_no: $('bgNo').value.trim() || null,
+    qr_text: $('bgQr').value.trim() || null,
+    avatar_id: $('bgAvatar').value.trim() || null,
+  };
   try {
     await api(`/api/v1/devices/${encodeURIComponent(dev)}/badge`, {
       method: 'PUT',
       headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        title: $('bgTitle').value.trim() || null,
-        employee_no: $('bgNo').value.trim() || null,
-        qr_text: $('bgQr').value.trim() || null,
-        avatar_id: $('bgAvatar').value.trim() || null,
-      }),
+      body: JSON.stringify(payload),
     });
-    toast('工牌配置已保存，设备联网后约 15 秒自动更新');
-    $('badgeModal').classList.remove('show');
-  } catch (e) { /* toast 已提示 */ }
-});
+    localStorage.setItem('badgeDevice', dev);
+    const time = new Date().toLocaleTimeString();
+    /* 保存后立即回读比对，让"是否真的存上"在页面上可见 */
+    try {
+      const saved = await api(`/api/v1/devices/${encodeURIComponent(dev)}/badge`, { headers: adminHeaders() });
+      const same = saved
+        && saved.name === payload.name
+        && (saved.title || null) === payload.title
+        && (saved.employee_no || null) === payload.employee_no
+        && (saved.qr_text || null) === payload.qr_text
+        && (saved.avatar_id || 'grinning_face') === (payload.avatar_id || 'grinning_face');
+      if (same) {
+        $('badgeStatus').textContent = `✓ 已保存并回读确认：${dev} · ${time}（设备联网后约 15 秒自动更新）`;
+        if (manual) toast('工牌配置已保存（已回读确认）');
+      } else {
+        $('badgeStatus').textContent = `已保存，但回读内容与填写不一致，请检查服务端日志（${time}）`;
+        toast('已保存，但回读内容不一致，请检查服务端');
+      }
+    } catch (e2) {
+      $('badgeStatus').textContent = `已保存（${time}），但回读校验失败：${e2.message}（旧版服务端不支持管理员读取时会如此，请重启服务端）`;
+    }
+  } catch (e) {
+    $('badgeStatus').textContent = `保存失败：${e.message}`;
+  }
+}
+
+let badgeSaveTimer = null;
+function scheduleBadgeAutoSave() {
+  clearTimeout(badgeSaveTimer);
+  badgeSaveTimer = setTimeout(() => saveBadge(false), 1000);
+}
+for (const fid of ['bgName', 'bgTitle', 'bgNo', 'bgQr', 'bgAvatar']) {
+  $(fid).addEventListener('input', scheduleBadgeAutoSave);
+}
+
+$('bgSave').addEventListener('click', () => { clearTimeout(badgeSaveTimer); saveBadge(true); });
 
 /* ---------- 角色配置 ---------- */
 let editingRoleId = null;

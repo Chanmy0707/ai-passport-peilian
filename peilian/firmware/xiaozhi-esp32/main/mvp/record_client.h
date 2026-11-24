@@ -50,6 +50,9 @@ struct BadgeProfile {
 /* 出厂预制工牌信息（未绑定/未拉到云端配置时的默认显示）：默认 😀（grinning_face）、Jack/销售顾问/No.1024。 */
 BadgeProfile PresetBadgeProfile();
 
+/* 最近一次工牌拉取结果（设备页"同步工牌"反馈用）：kNotConfigured=404 未在后台配置。 */
+enum class BadgeFetchResult { kOk, kNotConfigured, kFailed };
+
 class RecordClient {
 public:
     static RecordClient& GetInstance();
@@ -75,6 +78,12 @@ public:
     void StartBadgeRetry();
     BadgeProfile GetBadgeProfile() const;
     void SetBadgeProfileCallback(std::function<void(const BadgeProfile&)> callback);
+    /* 工牌拉取进行中（后台任务跑 HTTP，主线程可查避免重复触发）。 */
+    bool IsBadgeFetching() const { return badge_fetch_running_.load(); }
+    /* 最近一次拉取结果（kOk=200 且解析成功；kNotConfigured=404；kFailed=网络/服务/解析失败）。 */
+    BadgeFetchResult GetBadgeLastResult() const {
+        return static_cast<BadgeFetchResult>(badge_last_result_.load());
+    }
 
     /* 头像静态图：badge 任务内按需下载 avatar_url（先查 mvp_emoji 缓存），完成后经 Schedule 回调
      * (emoji_id, PNG 字节, 长度)；data 为 heap_caps_malloc 块，所有权移交回调方（用后 heap_caps_free）；
@@ -129,6 +138,7 @@ private:
     std::string session_id_;
 
     std::atomic<bool> badge_fetch_running_{false};
+    std::atomic<int> badge_last_result_{static_cast<int>(BadgeFetchResult::kFailed)};
     esp_timer_handle_t badge_retry_timer_ = nullptr;
     mutable std::mutex badge_mutex_;
     BadgeProfile badge_;
